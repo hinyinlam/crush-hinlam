@@ -833,10 +833,8 @@ func (c *coordinator) buildAnthropicProvider(baseURL, apiKey string, headers map
 		opts = append(opts, anthropic.WithBaseURL(baseURL))
 	}
 
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, anthropic.WithHTTPClient(httpClient))
-	}
+	httpClient := log.NewRetryHTTPClientWithDebug(c.cfg.Config().Options.Debug)
+	opts = append(opts, anthropic.WithHTTPClient(httpClient))
 	return anthropic.New(opts...)
 }
 
@@ -845,10 +843,8 @@ func (c *coordinator) buildOpenaiProvider(baseURL, apiKey string, headers map[st
 		openai.WithAPIKey(apiKey),
 		openai.WithUseResponsesAPI(),
 	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, openai.WithHTTPClient(httpClient))
-	}
+	httpClient := log.NewRetryHTTPClientWithDebug(c.cfg.Config().Options.Debug)
+	opts = append(opts, openai.WithHTTPClient(httpClient))
 	if len(headers) > 0 {
 		opts = append(opts, openai.WithHeaders(headers))
 	}
@@ -862,10 +858,8 @@ func (c *coordinator) buildOpenrouterProvider(_, apiKey string, headers map[stri
 	opts := []openrouter.Option{
 		openrouter.WithAPIKey(apiKey),
 	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, openrouter.WithHTTPClient(httpClient))
-	}
+	httpClient := log.NewRetryHTTPClientWithDebug(c.cfg.Config().Options.Debug)
+	opts = append(opts, openrouter.WithHTTPClient(httpClient))
 	if len(headers) > 0 {
 		opts = append(opts, openrouter.WithHeaders(headers))
 	}
@@ -876,10 +870,8 @@ func (c *coordinator) buildVercelProvider(_, apiKey string, headers map[string]s
 	opts := []vercel.Option{
 		vercel.WithAPIKey(apiKey),
 	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, vercel.WithHTTPClient(httpClient))
-	}
+	httpClient := log.NewRetryHTTPClientWithDebug(c.cfg.Config().Options.Debug)
+	opts = append(opts, vercel.WithHTTPClient(httpClient))
 	if len(headers) > 0 {
 		opts = append(opts, vercel.WithHeaders(headers))
 	}
@@ -905,12 +897,10 @@ func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers 
 		)
 		httpClient = copilot.NewClient(isSubAgent, c.cfg.Config().Options.Debug)
 	}
-	if httpClient == nil && c.cfg.Config().Options.Debug {
-		httpClient = log.NewHTTPClient()
+	if httpClient == nil {
+		httpClient = log.NewRetryHTTPClientWithDebug(c.cfg.Config().Options.Debug)
 	}
-	if httpClient != nil {
-		opts = append(opts, openaicompat.WithHTTPClient(httpClient))
-	}
+	opts = append(opts, openaicompat.WithHTTPClient(httpClient))
 
 	if len(headers) > 0 {
 		opts = append(opts, openaicompat.WithHeaders(headers))
@@ -929,10 +919,8 @@ func (c *coordinator) buildAzureProvider(baseURL, apiKey string, headers map[str
 		azure.WithAPIKey(apiKey),
 		azure.WithUseResponsesAPI(),
 	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, azure.WithHTTPClient(httpClient))
-	}
+	httpClient := log.NewRetryHTTPClientWithDebug(c.cfg.Config().Options.Debug)
+	opts = append(opts, azure.WithHTTPClient(httpClient))
 	if options == nil {
 		options = make(map[string]string)
 	}
@@ -948,10 +936,8 @@ func (c *coordinator) buildAzureProvider(baseURL, apiKey string, headers map[str
 
 func (c *coordinator) buildBedrockProvider(apiKey string, headers map[string]string, providerID string) (fantasy.Provider, error) {
 	var opts []bedrock.Option
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, bedrock.WithHTTPClient(httpClient))
-	}
+	httpClient := log.NewRetryHTTPClientWithDebug(c.cfg.Config().Options.Debug)
+	opts = append(opts, bedrock.WithHTTPClient(httpClient))
 	if len(headers) > 0 {
 		opts = append(opts, bedrock.WithHeaders(headers))
 	}
@@ -980,10 +966,8 @@ func (c *coordinator) buildGoogleProvider(baseURL, apiKey string, headers map[st
 		google.WithBaseURL(baseURL),
 		google.WithGeminiAPIKey(apiKey),
 	}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, google.WithHTTPClient(httpClient))
-	}
+	httpClient := log.NewRetryHTTPClientWithDebug(c.cfg.Config().Options.Debug)
+	opts = append(opts, google.WithHTTPClient(httpClient))
 	if len(headers) > 0 {
 		opts = append(opts, google.WithHeaders(headers))
 	}
@@ -992,10 +976,8 @@ func (c *coordinator) buildGoogleProvider(baseURL, apiKey string, headers map[st
 
 func (c *coordinator) buildGoogleVertexProvider(headers map[string]string, options map[string]string) (fantasy.Provider, error) {
 	opts := []google.Option{}
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, google.WithHTTPClient(httpClient))
-	}
+	httpClient := log.NewRetryHTTPClientWithDebug(c.cfg.Config().Options.Debug)
+	opts = append(opts, google.WithHTTPClient(httpClient))
 	if len(headers) > 0 {
 		opts = append(opts, google.WithHeaders(headers))
 	}
