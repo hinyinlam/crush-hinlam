@@ -21,6 +21,32 @@
 - **Works Everywhere:** first-class support in every terminal on macOS, Linux, Windows (PowerShell and WSL), Android, FreeBSD, OpenBSD, and NetBSD
 - **Industrial Grade:** built on the Charm ecosystem, powering 25k+ applications, from leading open source projects to business-critical infrastructure
 
+## Hin Lam's Fork
+
+This fork (`hinylam/crush-hinlam`) adds the following enhancements on top of upstream [Charmbracelet Crush](https://github.com/charmbracelet/crush):
+
+### `--yolo` Mode: True Hands-Free Operation
+- **`crush run --yolo`** — one-shot CLI now supports yolo mode for fully automatic execution
+- **Full command blocklist bypass** — dangerous commands (`ssh`, `scp`, `apt`, `curl`, `sudo`, etc.) are allowed in yolo mode instead of being sandboxed
+- **Dynamic tool description** — bash tool description hides banned commands when yolo is active, so the LLM won't refuse to attempt them
+- **Runtime toggle** — yolo mode can be toggled mid-session with `Ctrl+Y`, and the blocklist updates immediately
+
+### Exponential Backoff for API Rate Limiting
+- HTTP 429 (Too Many Requests) and 5xx responses automatically retry with exponential backoff (1s → 2s → 4s → 8s → 16s → 32s, max 60s, ±25% jitter)
+- Respects `Retry-After` headers from LLM providers
+- Applied to all 9 LLM providers (Anthropic, OpenAI, OpenRouter, Vercel, OpenAI-compat, Azure, Bedrock, Google, Google Vertex)
+
+### Versioning
+- Version string format: `v0.X.Y-hinlam` (tracks the latest upstream Charmbracelet tag)
+- Example: `v0.81.0-hinlam`
+
+### Build from Source
+```bash
+git clone https://github.com/hinyinlam/crush-hinlam.git
+cd crush-hinlam
+go install -ldflags "-X github.com/charmbracelet/crush/internal/version.Version=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null)-hinlam" .
+```
+
 ## Installation
 
 Use a package manager:
