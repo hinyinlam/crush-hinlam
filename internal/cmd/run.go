@@ -55,6 +55,9 @@ crush run --quiet "Generate a README for this project"
 # Run in verbose mode (show logs)
 crush run --verbose "Generate a README for this project"
 
+# Run in yolo mode (auto-accept all permissions)
+crush run --yolo "Deploy my project"
+
 # Continue a previous session
 crush run --session {session-id} "Follow up on your last response"
 
@@ -149,6 +152,7 @@ crush run --continue "Follow up on your last response"
 func init() {
 	runCmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
 	runCmd.Flags().BoolP("verbose", "v", false, "Show logs")
+	runCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
 	runCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
 	runCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
 	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")

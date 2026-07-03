@@ -4,7 +4,7 @@ version: "3"
 
 vars:
   VERSION:
-    sh: git describe --long 2>/dev/null || echo ""
+    sh: git describe --tags --match 'v*' --abbrev=0 2>/dev/null | sed 's/$/-hinlam/' || echo "devel"
   RACE:
     sh: test -f race.log && echo "1" || echo ""
 

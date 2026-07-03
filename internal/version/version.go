@@ -18,6 +18,9 @@ var (
 	BuildID = ""
 )
 
+// HinlamSuffix is appended to the version string for the hinylam fork.
+const HinlamSuffix = "-hinlam"
+
 // A user may install crush using `go install github.com/charmbracelet/crush@latest`.
 // without -ldflags, in which case the version above is unset. As a workaround
 // we use the embedded build version that *is* set when using `go install` (and
@@ -26,15 +29,29 @@ func init() {
 	info, ok := debug.ReadBuildInfo()
 	if ok {
 		mainVersion := info.Main.Version
-		if mainVersion != "" && mainVersion != "(devel)" {
+		// Only use build info when ldflags didn't set a real version.
+		if Version == "devel" && mainVersion != "" && mainVersion != "(devel)" {
 			Version = mainVersion
 		}
+	}
+
+	// Append hinlam suffix when not already present and version is set.
+	if Version != "devel" && Version != "" {
+		Version = stripHinlamSuffix(Version) + HinlamSuffix
 	}
 
 	// Derive BuildID when not set via ldflags.
 	if BuildID == "" {
 		BuildID = deriveBuildID()
 	}
+}
+
+// stripHinlamSuffix removes an existing -hinlam suffix from v.
+func stripHinlamSuffix(v string) string {
+	if len(v) > len(HinlamSuffix) && v[len(v)-len(HinlamSuffix):] == HinlamSuffix {
+		return v[:len(v)-len(HinlamSuffix)]
+	}
+	return v
 }
 
 // deriveBuildID uses the running executable's modification time as a unique
