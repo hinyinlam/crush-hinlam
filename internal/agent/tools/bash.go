@@ -145,8 +145,11 @@ var bannedCommands = []string{
 	"ufw",
 }
 
-func bashDescription(attribution *config.Attribution, modelID string) string {
+func bashDescription(attribution *config.Attribution, modelID string, yolo bool) string {
 	bannedCommandsStr := strings.Join(bannedCommands, ", ")
+	if yolo {
+		bannedCommandsStr = ""
+	}
 	var out bytes.Buffer
 	if err := bashDescriptionTpl.Execute(&out, bashDescriptionData{
 		BannedCommands:  bannedCommandsStr,
@@ -200,7 +203,7 @@ func blockFuncs(yolo bool) []shell.BlockFunc {
 func NewBashTool(permissions permission.Service, workingDir string, attribution *config.Attribution, modelID string) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		BashToolName,
-		string(bashDescription(attribution, modelID)),
+		string(bashDescription(attribution, modelID, permissions.SkipRequests())),
 		func(ctx context.Context, params BashParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			bf := blockFuncs(permissions.SkipRequests())
 			if params.Command == "" {

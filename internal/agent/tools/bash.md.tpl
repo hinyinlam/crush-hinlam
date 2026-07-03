@@ -8,7 +8,11 @@ Common shell builtins and core utils available on Windows.
 
 <execution_steps>
 1. Directory Verification: If creating directories/files, use LS tool to verify parent exists
+{{- if .BannedCommands }}
 2. Security Check: Banned commands ({{ .BannedCommands }}) return error - explain to user. Safe read-only commands execute without prompts
+{{- else }}
+2. Security Check: Safe read-only commands execute without prompts. All commands allowed in current mode.
+{{- end }}
 3. Command Execution: Execute with proper quoting, capture output
 4. Auto-Background: Commands exceeding 1 minute (default, configurable via `auto_background_after`) automatically move to background and return shell ID
 5. Output Processing: Truncate if exceeds {{ .MaxOutputLength }} characters
