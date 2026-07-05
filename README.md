@@ -36,6 +36,22 @@ This fork (`hinylam/crush-hinlam`) adds the following enhancements on top of ups
 - Respects `Retry-After` headers from LLM providers
 - Applied to all 9 LLM providers (Anthropic, OpenAI, OpenRouter, Vercel, OpenAI-compat, Azure, Bedrock, Google, Google Vertex)
 
+### `/goal` — Autonomous Multi-Turn Goal Pursuit
+Set a natural-language completion condition and the agent works autonomously across multiple turns until the goal is verifiably met. Inspired by Claude Code's `/goal` feature.
+
+**Usage:**
+- **`/goal <condition>`** — Activate a goal (e.g. `/goal all tests pass and lint is clean`)
+- **`/goal`** — Show current goal status, turn count, and evaluator reason
+- **`/goal clear`** — Cancel the active goal (aliases: `stop`, `cancel`, `off`, `reset`, `none`)
+- Or use the command palette — press `/` and search for "Set Goal", "Goal Status", or "Clear Goal"
+
+**How it works:**
+- The goal condition is injected into the system prompt on every turn (survives compaction)
+- After each turn, a **separate small/fast model** evaluates whether the condition is met against the conversation transcript
+- If not met, the agent receives a continuation prompt and keeps working
+- Safety limit of 50 turns prevents infinite loops
+- Works in both interactive TUI and client/server mode
+
 ### Versioning
 - Version string format: `v0.X.Y-hinlam` (tracks the latest upstream Charmbracelet tag)
 - Example: `v0.81.0-hinlam`

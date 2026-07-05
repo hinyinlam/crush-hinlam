@@ -26,6 +26,7 @@ import (
 	"github.com/charmbracelet/crush/internal/discover"
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/filetracker"
+	"github.com/charmbracelet/crush/internal/goal"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/log"
@@ -102,6 +103,7 @@ type Coordinator interface {
 	Model() Model
 	UpdateModels(ctx context.Context) error
 	GenerateTitle(ctx context.Context, sessionID, prompt string)
+	EvaluateGoal(ctx context.Context, sessionID, condition string) (bool, string, error)
 }
 
 type coordinator struct {
@@ -114,6 +116,7 @@ type coordinator struct {
 	lspManager  *lsp.Manager
 	notify      pubsub.Publisher[notify.Notification]
 	runComplete pubsub.Publisher[notify.RunComplete]
+	goalService *goal.Service
 
 	currentAgent SessionAgent
 	agents       map[string]SessionAgent
@@ -138,6 +141,7 @@ func NewCoordinator(
 	notify pubsub.Publisher[notify.Notification],
 	runComplete pubsub.Publisher[notify.RunComplete],
 	skillsMgr *skills.Manager,
+	goalService *goal.Service,
 ) (Coordinator, error) {
 	// Skills are pre-discovered by the caller (see app.New /
 	// backend.CreateWorkspace) and passed in via the manager. If no
@@ -162,6 +166,7 @@ func NewCoordinator(
 		lspManager:   lspManager,
 		notify:       notify,
 		runComplete:  runComplete,
+		goalService:  goalService,
 		agents:       make(map[string]SessionAgent),
 		allSkills:    allSkills,
 		activeSkills: activeSkills,
@@ -267,6 +272,14 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	// the coalesce closure publishes the final outcome under that
 	// same correlator.
 	runID := RunIDFromContext(ctx)
+	// Inject the active goal condition (if any) so the agent sees it
+	// in the system prompt on every turn.
+	var goalCondition string
+	if c.goalService != nil {
+		if gs := c.goalService.Get(sessionID); gs != nil && gs.Active && !gs.Paused {
+			goalCondition = gs.Condition
+		}
+	}
 	run := func() (*fantasy.AgentResult, error) {
 		return c.currentAgent.Run(ctx, SessionAgentCall{
 			SessionID:        sessionID,
@@ -282,6 +295,7 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 			PresencePenalty:  presPenalty,
 			OnComplete:       onComplete,
 			Accepted:         accept,
+			GoalCondition:    goalCondition,
 		})
 	}
 	beforeLoaded := c.skillTracker.LoadedNames()
@@ -1159,6 +1173,13 @@ func (c *coordinator) GenerateTitle(ctx context.Context, sessionID, prompt strin
 		return
 	}
 	c.currentAgent.GenerateTitle(ctx, sessionID, prompt)
+}
+
+func (c *coordinator) EvaluateGoal(ctx context.Context, sessionID, condition string) (bool, string, error) {
+	if c.currentAgent == nil {
+		return false, "", errors.New("agent not initialized")
+	}
+	return c.currentAgent.EvaluateGoal(ctx, sessionID, condition)
 }
 
 // refreshTokenIfExpired proactively refreshes the OAuth token if it has expired.

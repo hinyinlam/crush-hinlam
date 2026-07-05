@@ -94,6 +94,10 @@ type SessionAgentCall struct {
 	FrequencyPenalty *float64
 	PresencePenalty  *float64
 	NonInteractive   bool
+	// GoalCondition, when non-empty, injects the active goal into the
+	// system prompt so the agent stays focused on the objective across
+	// all turns (including after compaction).
+	GoalCondition string
 	// OnComplete, when non-nil, replaces the default RunComplete
 	// publish path: the inner Run hands the terminal payload to this
 	// callback instead of emitting it on the RunComplete broker. The
@@ -142,6 +146,7 @@ type SessionAgent interface {
 	Summarize(context.Context, string, fantasy.ProviderOptions) error
 	Model() Model
 	GenerateTitle(ctx context.Context, sessionID, userPrompt string)
+	EvaluateGoal(ctx context.Context, sessionID, condition string) (met bool, reason string, err error)
 }
 
 type Model struct {
@@ -659,6 +664,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 
 	if s := instructions.String(); s != "" {
 		systemPrompt += "\n\n<mcp-instructions>\n" + s + "\n</mcp-instructions>"
+	}
+
+	if call.GoalCondition != "" {
+		systemPrompt += "\n\n<goal>\nYou are working toward this goal:\n" + call.GoalCondition + "\n\nKeep working autonomously until the goal is verifiably met. Do not ask for confirmation between steps — use your tools, verify your work, and only stop when the goal is achieved or you are genuinely blocked.\n</goal>"
 	}
 
 	if len(agentTools) > 0 {
@@ -1809,6 +1818,136 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		return
 	}
 	titleSaved = true
+}
+
+// EvaluateGoal uses the small model to determine whether the goal
+// condition has been met based on the conversation so far. Returns
+// (true, reason) when the condition is satisfied, (false, reason)
+// when more work is needed.
+func (a *sessionAgent) EvaluateGoal(ctx context.Context, sessionID, condition string) (bool, string, error) {
+	session, err := a.sessions.Get(ctx, sessionID)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get session for goal evaluation: %w", err)
+	}
+	msgs, err := a.getSessionMessages(ctx, session)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get messages for goal evaluation: %w", err)
+	}
+
+	// Build a compact transcript of recent assistant turns (last 6 messages).
+	var transcript strings.Builder
+	start := len(msgs) - 6
+	if start < 0 {
+		start = 0
+	}
+	for _, msg := range msgs[start:] {
+		text := msg.Content().String()
+		if text == "" {
+			continue
+		}
+		role := "User"
+		if msg.Role == message.Assistant {
+			role = "Assistant"
+		}
+		// Truncate long messages to keep the evaluator prompt small.
+		if len(text) > 2000 {
+			text = text[:2000] + "…"
+		}
+		fmt.Fprintf(&transcript, "[%s]: %s\n\n", role, text)
+	}
+
+	evaluationPrompt := fmt.Sprintf(`You are a goal evaluator. A coding agent has been working toward this goal:
+
+GOAL: %s
+
+Here is the recent conversation transcript:
+
+%s
+
+Has the goal been fully achieved? Consider:
+- Was the stated outcome accomplished?
+- Were tests run and passing (if applicable)?
+- Is there evidence of completion, not just a claim?
+
+Respond EXACTLY in this format:
+MET: <true|false>
+REASON: <one sentence explanation>`, condition, transcript.String())
+
+	smallModel := a.smallModel.Get()
+	systemPromptPrefix := a.systemPromptPrefix.Get()
+
+	newAgent := func(m fantasy.LanguageModel, p string, tok int64) fantasy.Agent {
+		return fantasy.NewAgent(
+			m,
+			fantasy.WithSystemPrompt(p+"\n /no_think"),
+			fantasy.WithMaxOutputTokens(tok),
+			fantasy.WithUserAgent(userAgent),
+		)
+	}
+
+	streamCall := fantasy.AgentStreamCall{
+		Prompt: evaluationPrompt,
+		PrepareStep: func(callCtx context.Context, opts fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
+			prepared.Messages = opts.Messages
+			if systemPromptPrefix != "" {
+				prepared.Messages = append([]fantasy.Message{
+					fantasy.NewSystemMessage(systemPromptPrefix),
+				}, prepared.Messages...)
+			}
+			return callCtx, prepared, nil
+		},
+	}
+
+	tok := int64(200)
+	if smallModel.CatwalkCfg.CanReason {
+		tok = smallModel.CatwalkCfg.DefaultMaxTokens
+	}
+
+	agent := newAgent(smallModel.Model, "You are a concise goal evaluator. Evaluate whether the stated goal has been achieved based on the conversation. Do not think step by step.", tok)
+	resp, err := agent.Stream(ctx, streamCall)
+	if err != nil {
+		return false, "", fmt.Errorf("goal evaluation LLM call failed: %w", err)
+	}
+
+	response := resp.Response.Content.Text()
+	response = thinkTagRegex.ReplaceAllString(response, "")
+	response = orphanThinkTagRegex.ReplaceAllString(response, response)
+	response = strings.TrimSpace(response)
+
+	return parseGoalEvaluation(response)
+}
+
+// parseGoalEvaluation extracts the met/reason verdict from the
+// evaluator model's response. It is lenient: if the format is
+// unrecognized it defaults to (false, raw_response) so the
+// auto-continue loop keeps going rather than falsely declaring success.
+func parseGoalEvaluation(response string) (bool, string, error) {
+	lines := strings.Split(response, "\n")
+	var met bool
+	var reason string
+	metFound := false
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		lower := strings.ToLower(line)
+		if strings.HasPrefix(lower, "met:") {
+			val := strings.TrimSpace(strings.TrimPrefix(lower, "met:"))
+			met = val == "true" || val == "yes"
+			metFound = true
+		} else if strings.HasPrefix(lower, "reason:") {
+			reason = strings.TrimSpace(line[len("Reason:"):])
+		}
+	}
+	if !metFound {
+		return false, response, nil
+	}
+	if reason == "" {
+		if met {
+			reason = "Goal condition appears satisfied."
+		} else {
+			reason = "Goal condition not yet met."
+		}
+	}
+	return met, reason, nil
 }
 
 func (a *sessionAgent) openrouterCost(metadata fantasy.ProviderMetadata) *float64 {

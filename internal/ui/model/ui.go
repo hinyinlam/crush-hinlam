@@ -1667,6 +1667,33 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		cmds = append(cmds, m.initializeProject())
 		m.dialog.CloseDialog(dialog.CommandsID)
 
+	case dialog.ActionSetGoal:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		m.textarea.SetValue("/goal ")
+		m.textarea.Focus()
+	case dialog.ActionClearGoal:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		if m.hasSession() {
+			m.com.Workspace.GoalClear(m.session.ID)
+			cmds = append(cmds, util.ReportInfo("Goal cleared."))
+		}
+	case dialog.ActionGoalStatus:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		if !m.hasSession() {
+			cmds = append(cmds, util.ReportInfo("No active goal."))
+			break
+		}
+		gs := m.com.Workspace.GoalGet(m.session.ID)
+		if gs == nil || !gs.Active {
+			cmds = append(cmds, util.ReportInfo("No active goal. Use /goal <condition> to set one."))
+			break
+		}
+		status := "Active"
+		if gs.Paused {
+			status = "Paused"
+		}
+		cmds = append(cmds, util.ReportInfo(fmt.Sprintf("◎ /goal %s\nCondition: %s\nTurns: %d\nLast check: %s", status, gs.Condition, gs.TurnCount, gs.LastReason)))
+
 	case dialog.ActionSelectModel:
 		if cmd := m.handleSelectModel(msg); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -2140,6 +2167,10 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					m.randomizePlaceholders()
 					m.historyReset()
 					return tea.Batch(m.runShellCommand(value))
+				}
+
+				if strings.HasPrefix(value, "/goal") {
+					return m.handleGoalCommand(value)
 				}
 
 				attachments := m.attachments.List()
@@ -3499,6 +3530,90 @@ func (m *UI) attachSkill(skillID, name string) tea.Cmd {
 			Content:  content,
 		}
 	}
+}
+
+// handleGoalCommand parses /goal subcommands: set a condition, show
+// status, or clear the active goal.
+func (m *UI) handleGoalCommand(value string) tea.Cmd {
+	if !m.com.Workspace.AgentIsReady() {
+		return util.ReportError(fmt.Errorf("coder agent is not initialized"))
+	}
+
+	args := strings.TrimSpace(strings.TrimPrefix(value, "/goal"))
+
+	if args == "" {
+		if !m.hasSession() {
+			return util.ReportInfo("No active goal.")
+		}
+		gs := m.com.Workspace.GoalGet(m.session.ID)
+		if gs == nil || !gs.Active {
+			return util.ReportInfo("No active goal. Usage: /goal <condition>")
+		}
+		status := "Active"
+		if gs.Paused {
+			status = "Paused"
+		}
+		if gs.CompletedAt.IsZero() {
+			return util.ReportInfo(fmt.Sprintf("◎ /goal %s\nCondition: %s\nTurns: %d\nLast check: %s", status, gs.Condition, gs.TurnCount, gs.LastReason))
+		}
+		return util.ReportInfo(fmt.Sprintf("✓ /goal completed\nCondition: %s\nReason: %s", gs.Condition, gs.LastReason))
+	}
+
+	lower := strings.ToLower(args)
+	if lower == "clear" || lower == "stop" || lower == "cancel" || lower == "off" || lower == "reset" || lower == "none" {
+		if !m.hasSession() {
+			return util.ReportInfo("No active goal.")
+		}
+		m.com.Workspace.GoalClear(m.session.ID)
+		return util.ReportInfo("Goal cleared.")
+	}
+
+	condition := strings.TrimSpace(args)
+
+	var cmds []tea.Cmd
+	if !m.hasSession() {
+		newSession, err := m.com.Workspace.CreateSession(context.Background(), "New Session")
+		if err != nil {
+			return util.ReportError(err)
+		}
+		if m.forceCompactMode {
+			m.isCompact = true
+		}
+		if newSession.ID != "" {
+			m.session = &newSession
+			cmds = append(cmds, m.loadSession(newSession.ID))
+		}
+		m.setState(uiChat, m.focus)
+	}
+
+	sessionID := m.session.ID
+	m.randomizePlaceholders()
+	m.historyReset()
+
+	cmds = append(cmds,
+		util.ReportInfo("◎ /goal active: "+condition),
+		func() tea.Msg {
+			err := m.com.Workspace.GoalSet(context.Background(), sessionID, condition)
+			if err != nil {
+				return util.InfoMsg{
+					Type: util.InfoTypeError,
+					Msg:  fmt.Sprintf("Goal error: %v", err),
+				}
+			}
+			gs := m.com.Workspace.GoalGet(sessionID)
+			if gs != nil && gs.LastReason != "" {
+				return util.InfoMsg{
+					Type: util.InfoTypeSuccess,
+					Msg:  "✓ Goal finished: " + gs.LastReason,
+				}
+			}
+			return util.InfoMsg{
+				Type: util.InfoTypeSuccess,
+				Msg:  "✓ Goal finished.",
+			}
+		},
+	)
+	return tea.Batch(cmds...)
 }
 
 // sendMessage sends a message with the given content and attachments.

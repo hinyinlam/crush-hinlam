@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/goal"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
@@ -448,6 +449,77 @@ func (w *AppWorkspace) Subscribe(program *tea.Program) {
 
 func (w *AppWorkspace) Shutdown() {
 	w.app.Shutdown()
+}
+
+// -- Goal --
+
+func (w *AppWorkspace) GoalGet(sessionID string) *goal.State {
+	return w.app.GoalService.Get(sessionID)
+}
+
+func (w *AppWorkspace) GoalClear(sessionID string) {
+	w.app.GoalService.Clear(sessionID)
+	w.app.AgentCoordinator.Cancel(sessionID)
+}
+
+// GoalSet activates a goal and runs the auto-continue loop. The
+// method blocks until the goal is met, cleared, paused, or the turn
+// limit is reached. It should be called from a background goroutine.
+func (w *AppWorkspace) GoalSet(ctx context.Context, sessionID, condition string) error {
+	if w.app.AgentCoordinator == nil {
+		return errors.New("agent coordinator not initialized")
+	}
+
+	w.app.GoalService.Set(sessionID, condition)
+	slog.Info("Goal activated", "session", sessionID, "condition", condition)
+
+	initialPrompt := condition + "\n\nWork toward this goal. Use your tools to investigate, implement, and verify. Run tests if applicable."
+
+	_, err := w.app.AgentCoordinator.Run(ctx, sessionID, initialPrompt)
+	if err != nil {
+		return fmt.Errorf("goal initial run failed: %w", err)
+	}
+
+	for {
+		gs := w.app.GoalService.Get(sessionID)
+		if gs == nil || !gs.Active || gs.Paused {
+			break
+		}
+		if gs.TurnCount >= goal.MaxGoalTurns {
+			slog.Info("Goal reached turn limit", "session", sessionID, "turns", gs.TurnCount)
+			break
+		}
+
+		met, reason, evalErr := w.app.AgentCoordinator.EvaluateGoal(ctx, sessionID, condition)
+		if evalErr != nil {
+			slog.Error("Goal evaluation failed, continuing", "error", evalErr)
+			met = false
+			reason = "Evaluation error: " + evalErr.Error()
+		}
+		w.app.GoalService.SetReason(sessionID, reason)
+
+		if met {
+			w.app.GoalService.Complete(sessionID, reason)
+			slog.Info("Goal completed", "session", sessionID, "reason", reason)
+			break
+		}
+
+		w.app.GoalService.IncrementTurn(sessionID)
+
+		// Check if goal was cleared/paused during evaluation.
+		gs = w.app.GoalService.Get(sessionID)
+		if gs == nil || !gs.Active || gs.Paused {
+			break
+		}
+
+		contPrompt := "Continue working toward the goal. The evaluator says: " + reason + "\n\nVerify your progress with tests or inspection, then proceed with the next step."
+		_, err := w.app.AgentCoordinator.Run(ctx, sessionID, contPrompt)
+		if err != nil {
+			return fmt.Errorf("goal continuation run failed: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // App returns the underlying app.App instance.

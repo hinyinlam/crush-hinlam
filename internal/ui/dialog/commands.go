@@ -522,6 +522,18 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "init", "Initialize Project", "", ActionInitializeProject{}),
 	)
 
+	// Goal commands — "Set Goal" is always available (it creates a
+	// session if needed), while status/clear require an active session.
+	commands = append(commands,
+		NewCommandItem(c.com.Styles, "set_goal", "Set Goal", "", ActionSetGoal{}),
+	)
+	if c.hasSession {
+		commands = append(commands,
+			NewCommandItem(c.com.Styles, "goal_status", "Goal Status", "", ActionGoalStatus{}),
+			NewCommandItem(c.com.Styles, "clear_goal", "Clear Goal", "", ActionClearGoal{}),
+		)
+	}
+
 	// Add transparent background toggle.
 	transparentLabel := "Disable Background Color"
 	if cfg != nil && cfg.Options != nil && cfg.Options.TUI.Transparent != nil && *cfg.Options.TUI.Transparent {

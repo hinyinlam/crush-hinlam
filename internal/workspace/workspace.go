@@ -12,6 +12,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/goal"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
@@ -96,6 +97,15 @@ type Workspace interface {
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel
+
+	// Goal — autonomous multi-turn goal pursuit (Claude Code-style
+	// /goal). GoalSet activates a goal and starts the auto-continue
+	// loop; the method blocks until the goal is met, cleared, or the
+	// turn limit is reached. GoalGet returns the current state (nil
+	// when no goal is active). GoalClear cancels any active goal.
+	GoalSet(ctx context.Context, sessionID, condition string) error
+	GoalGet(sessionID string) *goal.State
+	GoalClear(sessionID string)
 
 	// Permissions
 	//

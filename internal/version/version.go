@@ -35,10 +35,8 @@ func init() {
 		}
 	}
 
-	// Append hinlam suffix when not already present and version is set.
-	if Version != "devel" && Version != "" {
-		Version = stripHinlamSuffix(Version) + HinlamSuffix
-	}
+	// Always append hinlam suffix when not already present.
+	Version = stripHinlamSuffix(Version) + HinlamSuffix
 
 	// Derive BuildID when not set via ldflags.
 	if BuildID == "" {

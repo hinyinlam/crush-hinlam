@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/client"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/goal"
 	"github.com/charmbracelet/crush/internal/herdr"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/log"
@@ -38,6 +39,7 @@ type ClientWorkspace struct {
 	mu     sync.RWMutex
 	ws     proto.Workspace
 	skills *skills.Manager
+	goals  *goal.Service
 
 	// herdrClient reports agent state to herdr when running inside
 	// a herdr-managed pane. Nil when not in a herdr environment.
@@ -62,6 +64,7 @@ func NewClientWorkspace(c *client.Client, ws proto.Workspace) *ClientWorkspace {
 		client:      c,
 		ws:          ws,
 		skills:      mgr,
+		goals:       goal.NewService(),
 		herdrClient: herdr.Init(),
 	}
 }
@@ -648,6 +651,119 @@ func (w *ClientWorkspace) consumeEvents(evc <-chan any, send func(tea.Msg)) {
 func (w *ClientWorkspace) Shutdown() {
 	w.herdrClient.Close()
 	_ = w.client.DeleteWorkspace(context.Background(), w.workspaceID())
+}
+
+// -- Goal --
+
+func (w *ClientWorkspace) GoalGet(sessionID string) *goal.State {
+	return w.goals.Get(sessionID)
+}
+
+func (w *ClientWorkspace) GoalClear(sessionID string) {
+	w.goals.Clear(sessionID)
+	w.AgentCancel(sessionID)
+}
+
+// GoalSet activates a goal and runs the auto-continue loop using
+// marker-based detection. The agent is instructed to emit
+// [GOAL_COMPLETE] when done; the loop polls for the agent to finish
+// each turn, then checks the last message for the marker.
+func (w *ClientWorkspace) GoalSet(ctx context.Context, sessionID, condition string) error {
+	w.goals.Set(sessionID, condition)
+	slog.Info("Goal activated (client mode)", "session", sessionID, "condition", condition)
+
+	initialPrompt := fmt.Sprintf(`<goal>
+%s
+</goal>
+
+Work toward this goal. Use your tools to investigate, implement, and verify. Run tests if applicable. When you believe the goal is verifiably complete, end your response with [GOAL_COMPLETE]. If you are genuinely blocked and need human intervention, end with [GOAL_BLOCKED].`, condition)
+
+	err := w.AgentRun(ctx, sessionID, initialPrompt)
+	if err != nil {
+		return fmt.Errorf("goal initial run failed: %w", err)
+	}
+
+	for {
+		gs := w.goals.Get(sessionID)
+		if gs == nil || !gs.Active || gs.Paused {
+			break
+		}
+		if gs.TurnCount >= goal.MaxGoalTurns {
+			slog.Info("Goal reached turn limit", "session", sessionID, "turns", gs.TurnCount)
+			break
+		}
+
+		// Poll until the agent finishes the current turn.
+		if err := w.waitForIdle(ctx, sessionID); err != nil {
+			return err
+		}
+
+		// Check the last assistant message for completion markers.
+		complete, blocked, reason := w.checkGoalMarkers(ctx, sessionID)
+		if complete || blocked {
+			w.goals.Complete(sessionID, reason)
+			slog.Info("Goal completed via marker", "session", sessionID, "reason", reason)
+			break
+		}
+		w.goals.SetReason(sessionID, reason)
+
+		// Re-check goal state after the wait.
+		gs = w.goals.Get(sessionID)
+		if gs == nil || !gs.Active || gs.Paused {
+			break
+		}
+
+		w.goals.IncrementTurn(sessionID)
+
+		contPrompt := "Continue working toward the goal. Verify your progress with tests or inspection, then proceed. When done, end with [GOAL_COMPLETE]."
+		err := w.AgentRun(ctx, sessionID, contPrompt)
+		if err != nil {
+			return fmt.Errorf("goal continuation run failed: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// waitForIdle blocks until the agent is no longer busy on the session.
+func (w *ClientWorkspace) waitForIdle(ctx context.Context, sessionID string) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if !w.AgentIsSessionBusy(sessionID) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
+// checkGoalMarkers inspects the last assistant message for
+// [GOAL_COMPLETE] or [GOAL_BLOCKED] markers.
+func (w *ClientWorkspace) checkGoalMarkers(ctx context.Context, sessionID string) (complete, blocked bool, reason string) {
+	msgs, err := w.ListMessages(ctx, sessionID)
+	if err != nil || len(msgs) == 0 {
+		return false, false, "Unable to read messages for marker check."
+	}
+	last := msgs[len(msgs)-1]
+	if last.Role != message.Assistant {
+		return false, false, "Waiting for agent response."
+	}
+	text := last.Content().String()
+	upper := strings.ToUpper(text)
+	if strings.Contains(upper, "[GOAL_COMPLETE]") {
+		return true, false, "Agent reported goal complete."
+	}
+	if strings.Contains(upper, "[GOAL_BLOCKED]") {
+		return false, true, "Agent reported blocked."
+	}
+	return false, false, "Goal not yet complete; continuing."
 }
 
 // translateEvent converts proto-typed SSE events into the domain types
