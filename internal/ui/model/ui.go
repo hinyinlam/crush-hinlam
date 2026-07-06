@@ -1046,7 +1046,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 		}
-		cmds = append(cmds, m.loadPromptHistory())
 	case hyperRefreshDoneMsg:
 		if cmd := m.handleSelectModel(msg.action); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -2182,7 +2181,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				m.randomizePlaceholders()
 				m.historyReset()
 
-				return tea.Batch(m.sendMessage(value, attachments...), m.loadPromptHistory())
+				return m.sendMessage(value, attachments...)
 			case key.Matches(msg, m.keyMap.Chat.NewSession):
 				if !m.hasSession() {
 					break
@@ -3622,6 +3621,8 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 		return util.ReportError(fmt.Errorf("coder agent is not initialized"))
 	}
 
+	m.addToPromptHistory(content)
+
 	var cmds []tea.Cmd
 	if !m.hasSession() {
 		newSession, err := m.com.Workspace.CreateSession(context.Background(), "New Session")
@@ -3676,6 +3677,7 @@ func (m *UI) runShellCommand(command string) tea.Cmd {
 // execution. isFirstMessage indicates the command is the first user message
 // in a newly created session, which triggers title generation.
 func (m *UI) runShellCommandInternal(command string, isFirstMessage bool) tea.Cmd {
+	m.addToPromptHistory("!" + command)
 	var cmds []tea.Cmd
 	if !m.hasSession() {
 		newSession, err := m.com.Workspace.CreateSession(context.Background(), "New Session")

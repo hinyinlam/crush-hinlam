@@ -175,6 +175,22 @@ func (m *UI) historyNext() bool {
 	return true
 }
 
+// addToPromptHistory prepends a prompt to the in-memory history list so it
+// is immediately available for up-arrow recall. This works independently of
+// the database: whether the agent run succeeds, is cancelled, or aborted,
+// the sent prompt can always be scrolled back to. Duplicate consecutive
+// entries are skipped.
+func (m *UI) addToPromptHistory(content string) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return
+	}
+	if len(m.promptHistory.messages) > 0 && m.promptHistory.messages[0] == content {
+		return
+	}
+	m.promptHistory.messages = append([]string{content}, m.promptHistory.messages...)
+}
+
 // historyReset resets the history, but does not clear the message
 // it just sets the current draft to empty and the position in the history.
 func (m *UI) historyReset() {
