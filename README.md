@@ -52,6 +52,9 @@ Set a natural-language completion condition and the agent works autonomously acr
 - Safety limit of 50 turns prevents infinite loops
 - Works in both interactive TUI and client/server mode
 
+### Prompt History — Reliable Scroll-Back
+Prompt history navigation (Up/Down arrow) now reliably recalls the most recently sent message regardless of whether the agent run succeeded, was cancelled, or aborted. Previously, history loaded from the database could race with message storage, causing the last prompt to silently disappear from history. Now messages are added to in-memory history synchronously at send time, guaranteeing immediate recall.
+
 ### Versioning
 - Version string format: `v0.X.Y-hinlam` (tracks the latest upstream Charmbracelet tag)
 - Example: `v0.81.0-hinlam`
