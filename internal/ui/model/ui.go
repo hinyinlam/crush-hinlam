@@ -3456,33 +3456,15 @@ func (m *UI) randomizePlaceholders() {
 
 // renderEditorView renders the editor view with attachments if any.
 func (m *UI) renderEditorView(width int) string {
-	var parts []string
-
-	// Session name bar — shown above the prompt input in chat mode.
-	if m.hasSession() && m.state == uiChat {
-		nameBar := m.renderSessionNameBar(width)
-		if nameBar != "" {
-			parts = append(parts, nameBar)
-		}
-	}
-
 	var attachmentsView string
 	if len(m.attachments.List()) > 0 {
 		attachmentsView = m.attachments.Render(width)
 	}
-	parts = append(parts, attachmentsView, m.textarea.View(), "")
-	return strings.Join(parts, "\n")
-}
-
-// renderSessionNameBar renders the current session title as a compact bar
-// shown above the prompt input area in chat mode.
-func (m *UI) renderSessionNameBar(width int) string {
-	title := m.session.Title
-	if title == "" {
-		title = "New Session"
-	}
-	style := m.com.Styles.Sidebar.SessionTitle.Copy().Width(width - 2)
-	return style.Render(title)
+	return strings.Join([]string{
+		attachmentsView,
+		m.textarea.View(),
+		"", // margin at bottom of editor
+	}, "\n")
 }
 
 // cacheSidebarLogo renders and caches the sidebar logo at the specified width.

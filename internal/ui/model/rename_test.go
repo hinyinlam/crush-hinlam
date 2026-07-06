@@ -100,20 +100,3 @@ func TestHandleRenameCommandAgentNotReady(t *testing.T) {
 	cmd := u.handleRenameCommand("/rename New Name")
 	require.NotNil(t, cmd)
 }
-
-func TestRenderSessionNameBarShowsTitle(t *testing.T) {
-	t.Parallel()
-	u := newTestUIForRename(t, true)
-	u.state = uiChat
-	result := u.renderSessionNameBar(80)
-	require.Contains(t, result, "My Project")
-}
-
-func TestRenderSessionNameBarEmptyTitle(t *testing.T) {
-	t.Parallel()
-	u := newTestUIForRename(t, true)
-	u.state = uiChat
-	u.session.Title = ""
-	result := u.renderSessionNameBar(80)
-	require.Contains(t, result, "New Session")
-}
