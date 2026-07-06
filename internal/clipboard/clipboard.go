@@ -24,10 +24,23 @@ var (
 	ErrEmpty = errors.New("clipboard is empty or holds an unsupported format")
 )
 
+// available tracks whether the native clipboard was successfully
+// initialized. When false, clipboard operations are no-ops.
+var available bool
+
 // Init initializes the clipboard subsystem. On unsupported platforms it
 // returns ErrUnsupported but is otherwise safe to call.
 func Init() error {
-	return initClipboard()
+	err := initClipboard()
+	available = err == nil
+	return err
+}
+
+// Available returns true when the native clipboard subsystem is ready.
+// OSC 52 (terminal escape sequence) may still work even when this is
+// false.
+func Available() bool {
+	return available
 }
 
 // WriteText writes plain text to the system clipboard. On unsupported

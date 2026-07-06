@@ -109,13 +109,21 @@ func CopyToClipboard(text, successMessage string) tea.Cmd {
 // before showing the success message.
 // This is useful when you need to perform additional actions like clearing UI state.
 func CopyToClipboardWithCallback(text, successMessage string, callback tea.Cmd) tea.Cmd {
-	return tea.Sequence(
+	cmds := []tea.Cmd{
 		tea.SetClipboard(text),
 		func() tea.Msg {
 			clipboard.WriteText(text)
 			return nil
 		},
 		callback,
-		util.ReportInfo(successMessage),
-	)
+	}
+	// Report honest status: when the native clipboard is available the copy
+	// definitely worked (OSC 52 + native). When it's not available we rely
+	// solely on OSC 52 which depends on terminal support.
+	if clipboard.Available() {
+		cmds = append(cmds, util.ReportInfo(successMessage))
+	} else {
+		cmds = append(cmds, util.ReportInfo(successMessage+" (via terminal OSC 52)"))
+	}
+	return tea.Sequence(cmds...)
 }
