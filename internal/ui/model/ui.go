@@ -1693,6 +1693,13 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 		cmds = append(cmds, util.ReportInfo(fmt.Sprintf("◎ /goal %s\nCondition: %s\nTurns: %d\nLast check: %s", status, gs.Condition, gs.TurnCount, gs.LastReason)))
 
+	case dialog.ActionRename:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		if m.hasSession() {
+			m.textarea.SetValue(fmt.Sprintf("/rename %s", m.session.Title))
+		}
+		m.textarea.Focus()
+
 	case dialog.ActionSelectModel:
 		if cmd := m.handleSelectModel(msg); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -2170,6 +2177,10 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 
 				if strings.HasPrefix(value, "/goal") {
 					return m.handleGoalCommand(value)
+				}
+
+				if strings.HasPrefix(value, "/rename") {
+					return m.handleRenameCommand(value)
 				}
 
 				attachments := m.attachments.List()
@@ -3445,15 +3456,33 @@ func (m *UI) randomizePlaceholders() {
 
 // renderEditorView renders the editor view with attachments if any.
 func (m *UI) renderEditorView(width int) string {
+	var parts []string
+
+	// Session name bar — shown above the prompt input in chat mode.
+	if m.hasSession() && m.state == uiChat {
+		nameBar := m.renderSessionNameBar(width)
+		if nameBar != "" {
+			parts = append(parts, nameBar)
+		}
+	}
+
 	var attachmentsView string
 	if len(m.attachments.List()) > 0 {
 		attachmentsView = m.attachments.Render(width)
 	}
-	return strings.Join([]string{
-		attachmentsView,
-		m.textarea.View(),
-		"", // margin at bottom of editor
-	}, "\n")
+	parts = append(parts, attachmentsView, m.textarea.View(), "")
+	return strings.Join(parts, "\n")
+}
+
+// renderSessionNameBar renders the current session title as a compact bar
+// shown above the prompt input area in chat mode.
+func (m *UI) renderSessionNameBar(width int) string {
+	title := m.session.Title
+	if title == "" {
+		title = "New Session"
+	}
+	style := m.com.Styles.Sidebar.SessionTitle.Copy().Width(width - 2)
+	return style.Render(title)
 }
 
 // cacheSidebarLogo renders and caches the sidebar logo at the specified width.
@@ -3613,6 +3642,36 @@ func (m *UI) handleGoalCommand(value string) tea.Cmd {
 		},
 	)
 	return tea.Batch(cmds...)
+}
+
+// handleRenameCommand parses /rename: show current name or rename the
+// session. /rename alone shows the current title; /rename <name>
+// renames and saves the session immediately.
+func (m *UI) handleRenameCommand(value string) tea.Cmd {
+	if !m.com.Workspace.AgentIsReady() {
+		return util.ReportError(fmt.Errorf("coder agent is not initialized"))
+	}
+	if !m.hasSession() {
+		return util.ReportInfo("No active session to rename.")
+	}
+
+	args := strings.TrimSpace(strings.TrimPrefix(value, "/rename"))
+	if args == "" {
+		return util.ReportInfo(fmt.Sprintf("Current session: %s", m.session.Title))
+	}
+
+	newTitle := strings.TrimSpace(args)
+	m.session.Title = newTitle
+	return func() tea.Msg {
+		_, err := m.com.Workspace.SaveSession(context.Background(), *m.session)
+		if err != nil {
+			return util.InfoMsg{
+				Type: util.InfoTypeError,
+				Msg:  fmt.Sprintf("Failed to rename session: %v", err),
+			}
+		}
+		return util.ReportInfo(fmt.Sprintf("Session renamed to: %s", newTitle))
+	}
 }
 
 // sendMessage sends a message with the given content and attachments.

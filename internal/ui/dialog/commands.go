@@ -531,6 +531,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands,
 			NewCommandItem(c.com.Styles, "goal_status", "Goal Status", "", ActionGoalStatus{}),
 			NewCommandItem(c.com.Styles, "clear_goal", "Clear Goal", "", ActionClearGoal{}),
+			NewCommandItem(c.com.Styles, "rename", "Rename Session", "", ActionRename{}),
 		)
 	}
 

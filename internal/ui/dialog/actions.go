@@ -103,6 +103,9 @@ type (
 	ActionClearGoal struct{}
 	// ActionGoalStatus shows the current goal status.
 	ActionGoalStatus struct{}
+	// ActionRename pre-fills the input with /rename so the user can
+	// type the new session name and press Enter.
+	ActionRename struct{}
 )
 
 // Messages for API key input dialog.
