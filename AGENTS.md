@@ -44,6 +44,7 @@ internal/
   permission/                      Tool permission checking and allow-lists
   skills/                          Skill file discovery and loading
   shell/                           Bash command execution with background job support
+  terminal/                        Terminal multiplexer (tmux/screen) detection
   event/                           Telemetry (PostHog)
   pubsub/                          Internal pub/sub for cross-component messaging
   filetracker/                     Tracks files touched per session
@@ -83,6 +84,44 @@ internal/
   `HOOKS.md` for the user-facing protocol.
 - **CGO disabled**: builds with `CGO_ENABLED=0` and
   `GOEXPERIMENT=greenteagc`.
+
+## Terminal Multiplexer Detection
+
+The `internal/terminal` package detects whether Crush is running inside a
+terminal multiplexer (tmux or screen). Detection uses two strategies:
+
+1. **Environment variables** (fast path): checks `$TMUX` and `$STY`.
+2. **Process tree traversal** (fallback): walks `/proc/{pid}/status` and
+   `/proc/{pid}/comm` upward from the current PID to find a `tmux` or
+   `screen` ancestor. This works even when sudo/su clears environment
+   variables.
+
+When tmux is detected via `/proc` fallback, the package also reads the
+original `$TMUX` value from ancestor process environments and may query
+the tmux socket for the current window name (`tmux -S <socket>
+display-message -p '#{window_name}'`).
+
+The detection result is displayed in the compact header and sidebar as
+`tmux:session@window` (e.g. `tmux:0@main`). An asterisk suffix indicates
+the detection came from `/proc` traversal rather than environment
+variables.
+
+## Clipboard and OSC 52 Passthrough
+
+Crush copies text to the system clipboard using OSC 52 escape sequences
+via Bubble Tea's `SetClipboard`. Tmux silently eats unwrapped OSC 52
+sequences by default. To work around this, `CopyToClipboard` in
+`internal/ui/common/common.go` detects tmux via `terminal.DetectMux()`
+and sends an additional OSC 52 sequence wrapped in tmux DCS passthrough:
+
+```
+\ePtmux;\e\e]52;c;<base64>\a\e\\
+```
+
+This allows clipboard copy to work inside tmux without requiring
+`allow-passthrough on` in the tmux configuration. The passthrough
+formatting is unit-tested in `internal/ui/common/common_test.go` and
+end-to-end tested in `test/tmux_clipboard_e2e.sh`.
 
 ## Build/Test/Lint Commands
 
