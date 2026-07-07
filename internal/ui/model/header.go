@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/terminal"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -30,12 +31,14 @@ type header struct {
 	com     *common.Common
 	width   int
 	compact bool
+	mux     terminal.MuxInfo // cached multiplexer detection result
 }
 
 // newHeader creates a new header model.
 func newHeader(com *common.Common) *header {
 	h := &header{
 		com: com,
+		mux: terminal.DetectMux(),
 	}
 	h.refresh()
 	return h
@@ -103,6 +106,7 @@ func (h *header) drawHeader(
 		detailsOpen,
 		availDetailWidth,
 		hyperCredits,
+		h.mux,
 	)
 
 	remainingWidth := width -
@@ -135,6 +139,7 @@ func renderHeaderDetails(
 	detailsOpen bool,
 	availWidth int,
 	hyperCredits *int,
+	mux terminal.MuxInfo,
 ) string {
 	t := com.Styles
 
@@ -159,6 +164,10 @@ func renderHeaderDetails(
 	if com.IsHyper() && hyperCredits != nil {
 		hc := t.Header.HypercreditIcon.Render(styles.HypercreditIcon) + " " + t.Header.Percentage.Render(common.FormatCredits(*hyperCredits))
 		parts = append(parts, hc)
+	}
+
+	if mux.Type != "" {
+		parts = append(parts, t.Header.MuxIndicator.Render(mux.Display()))
 	}
 
 	const keystroke = "ctrl+d"

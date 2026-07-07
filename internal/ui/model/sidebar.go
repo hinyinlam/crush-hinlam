@@ -147,15 +147,24 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 			Hyper: m.com.IsHyper(),
 		})
 	}
+	var muxBlock string
+	if m.mux.Type != "" {
+		muxBlock = t.Header.MuxIndicator.Render(m.mux.Display())
+	}
 	blocks := []string{
 		sidebarLogo,
 		title,
 		"",
 		cwd,
+	}
+	if muxBlock != "" {
+		blocks = append(blocks, muxBlock)
+	}
+	blocks = append(blocks,
 		"",
 		m.modelInfo(width),
 		"",
-	}
+	)
 
 	sidebarHeader := lipgloss.JoinVertical(
 		lipgloss.Left,

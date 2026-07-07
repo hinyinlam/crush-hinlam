@@ -44,6 +44,7 @@ import (
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/stringext"
+	"github.com/charmbracelet/crush/internal/terminal"
 	"github.com/charmbracelet/crush/internal/ui/anim"
 	"github.com/charmbracelet/crush/internal/ui/attachments"
 	"github.com/charmbracelet/crush/internal/ui/chat"
@@ -230,6 +231,7 @@ type UI struct {
 	bangCancel context.CancelFunc
 
 	header *header
+	mux    terminal.MuxInfo // cached multiplexer detection result
 
 	// sendProgressBar instructs the TUI to send progress bar updates to the
 	// terminal.
@@ -375,6 +377,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		textarea:            ta,
 		chat:                ch,
 		header:              header,
+		mux:                 header.mux,
 		completions:         comp,
 		attachments:         attachments,
 		todoSpinner:         todoSpinner,

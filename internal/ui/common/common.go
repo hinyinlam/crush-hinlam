@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/base64"
 	"fmt"
 	"image"
 	"os"
@@ -8,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/clipboard"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/terminal"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
@@ -125,5 +127,30 @@ func CopyToClipboardWithCallback(text, successMessage string, callback tea.Cmd) 
 	} else {
 		cmds = append(cmds, util.ReportInfo(successMessage+" (via terminal OSC 52)"))
 	}
+	// When inside tmux, also send the OSC 52 sequence wrapped in tmux
+	// passthrough, because tmux eats unwrapped OSC 52 by default.
+	if mux := terminal.DetectMux(); mux.Type == "tmux" {
+		cmds = append(cmds, func() tea.Msg {
+			writeOSC52WithTmuxPassthrough(text)
+			return nil
+		})
+	}
 	return tea.Sequence(cmds...)
+}
+
+// writeOSC52WithTmuxPassthrough writes an OSC 52 clipboard set sequence
+// wrapped in tmux's DCS passthrough escape to stdout, bypassing tmux's
+// clipboard filtering. Without this wrapper, tmux silently discards OSC 52
+// sequences.
+func writeOSC52WithTmuxPassthrough(text string) {
+	os.Stdout.WriteString(buildOSC52TmuxPassthrough(text))
+}
+
+// buildOSC52TmuxPassthrough builds a tmux DCS passthrough-wrapped OSC 52
+// clipboard set sequence for the given text. Exported for testing.
+func buildOSC52TmuxPassthrough(text string) string {
+	// OSC 52 set clipboard: \e]52;c;<base64>\a
+	osc := "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(text)) + "\x07"
+	// tmux passthrough: \ePtmux;\e<sequence>\e\\
+	return "\x1bPtmux;\x1b" + osc + "\x1b\\"
 }
