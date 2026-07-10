@@ -232,6 +232,7 @@ type UI struct {
 
 	header *header
 	mux    terminal.MuxInfo // cached multiplexer detection result
+	trackingMode int        // 0 = session activity (Modified Files), 1 = git status (Git Status)
 
 	// sendProgressBar instructs the TUI to send progress bar updates to the
 	// terminal.
@@ -2186,6 +2187,10 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					return m.handleRenameCommand(value)
 				}
 
+				if strings.HasPrefix(value, "/tracking_mode") {
+					return m.handleTrackingModeCommand(value)
+				}
+
 				attachments := m.attachments.List()
 				m.attachments.Reset()
 				if len(value) == 0 && !message.ContainsTextAttachment(attachments) {
@@ -3657,6 +3662,17 @@ func (m *UI) handleRenameCommand(value string) tea.Cmd {
 		}
 		return util.ReportInfo(fmt.Sprintf("Session renamed to: %s", newTitle))
 	}
+}
+
+// handleTrackingModeCommand toggles the sidebar file tracking mode between
+// session activity and git status.
+func (m *UI) handleTrackingModeCommand(value string) tea.Cmd {
+	m.trackingMode = 1 - m.trackingMode // toggle 0↔1
+	mode := "Session Activity"
+	if m.trackingMode == 1 {
+		mode = "Git Status"
+	}
+	return util.ReportInfo(fmt.Sprintf("Tracking mode: %s", mode))
 }
 
 // sendMessage sends a message with the given content and attachments.

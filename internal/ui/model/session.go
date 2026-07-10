@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -179,9 +180,14 @@ func (m *UI) handleFileEvent(file history.File) tea.Cmd {
 }
 
 // filesInfo renders the modified files section for the sidebar, showing files
-// with their addition/deletion counts.
+// with their addition/deletion counts. When trackingMode is 1 (Git Status),
+// it shows the current git status instead of session activity.
 func (m *UI) filesInfo(cwd string, width, maxItems int, isSection bool) string {
 	t := m.com.Styles
+
+	if m.trackingMode == 1 {
+		return m.gitStatusInfo(cwd, width, maxItems, isSection)
+	}
 
 	title := t.Files.SectionTitle.Render("Modified Files")
 	if isSection {
@@ -199,6 +205,76 @@ func (m *UI) filesInfo(cwd string, width, maxItems int, isSection bool) string {
 		list = fileList(t, cwd, filesWithChanges, width, maxItems)
 	}
 
+	return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("%s\n\n%s", title, list))
+}
+
+// gitStatusInfo renders the git status section for the sidebar.
+func (m *UI) gitStatusInfo(cwd string, width, maxItems int, isSection bool) string {
+	t := m.com.Styles
+
+	title := t.Files.SectionTitle.Render("Git Status")
+	if isSection {
+		title = common.Section(t, "Git Status", width)
+	}
+
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = cwd
+	out, err := cmd.Output()
+	if err != nil {
+		list := t.Files.EmptyMessage.Render("Not a git repository")
+		return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("%s\n\n%s", title, list))
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		list := t.Files.EmptyMessage.Render("Clean")
+		return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("%s\n\n%s", title, list))
+	}
+
+	var statusLines []string
+	for i, line := range lines {
+		if maxItems > 0 && i >= maxItems {
+			remaining := len(lines) - maxItems
+			statusLines = append(statusLines, t.Files.TruncationHint.Render(fmt.Sprintf("…and %d more", remaining)))
+			break
+		}
+		if len(line) < 3 {
+			continue
+		}
+		status := line[:2]
+		filePath := strings.TrimSpace(line[2:])
+		// Trim leading/trailing quotes for paths with spaces.
+		filePath = strings.Trim(filePath, "\"")
+
+		var statusStyle lipgloss.Style
+		switch {
+		case strings.Contains(status, "M"):
+			statusStyle = t.Files.Additions // modified
+		case strings.Contains(status, "A"):
+			statusStyle = t.Files.Additions // added
+		case strings.Contains(status, "D"):
+			statusStyle = t.Files.Deletions // deleted
+		case strings.Contains(status, "R"):
+			statusStyle = t.Files.Additions // renamed
+		case strings.Contains(status, "?"):
+			statusStyle = t.Files.Deletions // untracked
+		case strings.Contains(status, "U"):
+			statusStyle = t.Files.Deletions // unmerged
+		default:
+			statusStyle = t.Files.Path
+		}
+
+		displayPath := filePath
+		displayStatus := statusStyle.Render(status)
+		maxPathWidth := max(width-lipgloss.Width(displayStatus)-1, 0)
+		displayPath = ansi.Truncate(displayPath, maxPathWidth, "…")
+		statusLines = append(statusLines, fmt.Sprintf("%s %s", displayStatus, t.Files.Path.Render(displayPath)))
+	}
+
+	list := t.Files.EmptyMessage.Render("None")
+	if len(statusLines) > 0 {
+		list = lipgloss.JoinVertical(lipgloss.Left, statusLines...)
+	}
 	return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("%s\n\n%s", title, list))
 }
 
