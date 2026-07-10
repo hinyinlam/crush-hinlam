@@ -507,6 +507,9 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	if c.Options.TUI == nil {
 		c.Options.TUI = &TUIOptions{}
 	}
+	if c.Options.ToolTimeoutSeconds <= 0 {
+		c.Options.ToolTimeoutSeconds = 120 // default 2 minutes
+	}
 	if len(c.Options.GlobalContextPaths) == 0 {
 		crushConfigDir := filepath.Dir(GlobalConfig())
 		c.Options.GlobalContextPaths = []string{

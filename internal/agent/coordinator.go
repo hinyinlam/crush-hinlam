@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
@@ -731,7 +732,8 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	// without hook interception to avoid firing the user's hook N times
 	// per delegated turn. The top-level invocation of the sub-agent tool
 	// itself is still wrapped from the coder's side.
-	filteredTools = wrapToolsWithHooks(filteredTools, hookRunner, isSubAgent)
+	toolTimeout := time.Duration(c.cfg.Config().Options.ToolTimeoutSeconds) * time.Second
+	filteredTools = wrapToolsWithHooks(filteredTools, hookRunner, isSubAgent, toolTimeout)
 
 	return filteredTools, nil
 }

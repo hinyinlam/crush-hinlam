@@ -297,6 +297,7 @@ type Options struct {
 	DisableNotifications      bool         `json:"disable_notifications,omitempty" jsonschema:"description=Deprecated: Use notification_style instead. Disable desktop notifications,default=false"`
 	NotificationStyle         string       `json:"notification_style,omitempty" jsonschema:"description=Notification style to use. Options: auto (default), native, osc, bell, disabled. Auto selects based on environment: native for local sessions, osc for SSH (with automatic OSC 99/777 detection).,enum=auto,enum=native,enum=osc,enum=bell,enum=disabled,default=auto"`
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=crush-config"`
+	ToolTimeoutSeconds        int          `json:"tool_timeout_seconds,omitempty" jsonschema:"description=Default timeout in seconds for tool execution (bash, fetch, etc.). Set to 0 to disable.,default=120,example=60,example=300"`
 }
 
 type MCPs map[string]MCPConfig

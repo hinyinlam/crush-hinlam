@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -16,25 +17,26 @@ import (
 // hookedTool wraps a fantasy.AgentTool to run PreToolUse hooks before
 // delegating to the inner tool.
 type hookedTool struct {
-	inner  fantasy.AgentTool
-	runner *hooks.Runner
+	inner       fantasy.AgentTool
+	runner      *hooks.Runner
+	toolTimeout time.Duration
 }
 
-func newHookedTool(inner fantasy.AgentTool, runner *hooks.Runner) *hookedTool {
-	return &hookedTool{inner: inner, runner: runner}
+func newHookedTool(inner fantasy.AgentTool, runner *hooks.Runner, toolTimeout time.Duration) *hookedTool {
+	return &hookedTool{inner: inner, runner: runner, toolTimeout: toolTimeout}
 }
 
 // wrapToolsWithHooks returns a tool slice with each entry wrapped in a
 // hookedTool. Returns the original slice unchanged when runner is nil or
 // when isSubAgent is true — sub-agents never fire hooks, the top-level
 // invocation of the sub-agent tool itself is wrapped on the caller's side.
-func wrapToolsWithHooks(tools []fantasy.AgentTool, runner *hooks.Runner, isSubAgent bool) []fantasy.AgentTool {
+func wrapToolsWithHooks(tools []fantasy.AgentTool, runner *hooks.Runner, isSubAgent bool, toolTimeout time.Duration) []fantasy.AgentTool {
 	if runner == nil || isSubAgent {
 		return tools
 	}
 	out := make([]fantasy.AgentTool, len(tools))
 	for i, tool := range tools {
-		out[i] = newHookedTool(tool, runner)
+		out[i] = newHookedTool(tool, runner, toolTimeout)
 	}
 	return out
 }
@@ -52,6 +54,13 @@ func (h *hookedTool) SetProviderOptions(opts fantasy.ProviderOptions) {
 }
 
 func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+	// Apply tool execution timeout if configured.
+	if h.toolTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, h.toolTimeout)
+		defer cancel()
+	}
+
 	sessionID := tools.GetSessionFromContext(ctx)
 	result, err := h.runner.Run(ctx, hooks.EventPreToolUse, sessionID, call.Name, call.Input)
 	if err != nil {

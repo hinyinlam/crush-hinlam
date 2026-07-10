@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"testing"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
@@ -51,7 +52,7 @@ func TestHookedTool_AllowStampsHookApproval(t *testing.T) {
 
 	inner := &fakeTool{name: "view", resp: fantasy.NewTextResponse("ok")}
 	runner := newRunner(t, `echo '{"decision":"allow"}'`)
-	tool := newHookedTool(inner, runner)
+	tool := newHookedTool(inner, runner, 0)
 
 	_, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "call-1", Name: "view"})
 	require.NoError(t, err)
@@ -75,7 +76,7 @@ func TestHookedTool_SilentDoesNotStampApproval(t *testing.T) {
 
 	inner := &fakeTool{name: "view", resp: fantasy.NewTextResponse("ok")}
 	runner := newRunner(t, `exit 0`) // no stdout, no decision
-	tool := newHookedTool(inner, runner)
+	tool := newHookedTool(inner, runner, 0)
 
 	_, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "call-2", Name: "view"})
 	require.NoError(t, err)
@@ -104,7 +105,7 @@ func TestHookedTool_DenySkipsInnerTool(t *testing.T) {
 
 	inner := &fakeTool{name: "bash"}
 	runner := newRunner(t, `echo "blocked" >&2; exit 2`)
-	tool := newHookedTool(inner, runner)
+	tool := newHookedTool(inner, runner, 0)
 
 	resp, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "call-3", Name: "bash"})
 	require.NoError(t, err)
@@ -121,7 +122,7 @@ func TestWrapToolsWithHooks(t *testing.T) {
 
 	t.Run("top-level agent wraps every tool", func(t *testing.T) {
 		t.Parallel()
-		out := wrapToolsWithHooks(inputs, runner, false)
+		out := wrapToolsWithHooks(inputs, runner, false, 0)
 		require.Len(t, out, len(inputs))
 		for i, tool := range out {
 			_, ok := tool.(*hookedTool)
@@ -131,7 +132,7 @@ func TestWrapToolsWithHooks(t *testing.T) {
 
 	t.Run("sub-agent skips the wrap", func(t *testing.T) {
 		t.Parallel()
-		out := wrapToolsWithHooks(inputs, runner, true)
+		out := wrapToolsWithHooks(inputs, runner, true, 0)
 		require.Equal(t, inputs, out, "sub-agent tools should be returned unwrapped")
 		for _, tool := range out {
 			_, isHooked := tool.(*hookedTool)
@@ -141,7 +142,38 @@ func TestWrapToolsWithHooks(t *testing.T) {
 
 	t.Run("nil runner skips the wrap for both agent kinds", func(t *testing.T) {
 		t.Parallel()
-		require.Equal(t, inputs, wrapToolsWithHooks(inputs, nil, false))
-		require.Equal(t, inputs, wrapToolsWithHooks(inputs, nil, true))
+		require.Equal(t, inputs, wrapToolsWithHooks(inputs, nil, false, 0))
+		require.Equal(t, inputs, wrapToolsWithHooks(inputs, nil, true, 0))
 	})
+}
+
+func TestHookedTool_TimeoutContextHasDeadline(t *testing.T) {
+	t.Parallel()
+
+	inner := &fakeTool{name: "test", resp: fantasy.NewTextResponse("ok")}
+	runner := newRunner(t, `exit 0`)
+	tool := newHookedTool(inner, runner, 5*time.Second)
+
+	_, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "call-1", Name: "test"})
+	require.NoError(t, err)
+	require.True(t, inner.called)
+
+	dl, ok := inner.gotCtx.Deadline()
+	require.True(t, ok, "context should have a deadline when timeout is set")
+	require.WithinDuration(t, time.Now().Add(5*time.Second), dl, 1*time.Second)
+}
+
+func TestHookedTool_ZeroTimeoutHasNoDeadline(t *testing.T) {
+	t.Parallel()
+
+	inner := &fakeTool{name: "test", resp: fantasy.NewTextResponse("ok")}
+	runner := newRunner(t, `exit 0`)
+	tool := newHookedTool(inner, runner, 0)
+
+	_, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "call-2", Name: "test"})
+	require.NoError(t, err)
+	require.True(t, inner.called)
+
+	_, ok := inner.gotCtx.Deadline()
+	require.False(t, ok, "context should NOT have a deadline when timeout is 0")
 }
