@@ -27,6 +27,7 @@ import (
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/home"
+	"github.com/charmbracelet/crush/internal/plugins"
 	powernapConfig "github.com/charmbracelet/x/powernap/pkg/config"
 	"github.com/qjebbs/go-jsons"
 	"github.com/tidwall/gjson"
@@ -557,6 +558,13 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 
 	// Add the default skills directories if not already present.
 	for _, dir := range GlobalSkillsDirs() {
+		if !slices.Contains(c.Options.SkillsPaths, dir) {
+			c.Options.SkillsPaths = append(c.Options.SkillsPaths, dir)
+		}
+	}
+
+	// Add installed Claude plugin skills directories.
+	for _, dir := range plugins.SkillsDirs() {
 		if !slices.Contains(c.Options.SkillsPaths, dir) {
 			c.Options.SkillsPaths = append(c.Options.SkillsPaths, dir)
 		}

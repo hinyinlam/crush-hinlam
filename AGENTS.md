@@ -45,6 +45,7 @@ internal/
   skills/                          Skill file discovery and loading
   shell/                           Bash command execution with background job support
   terminal/                        Terminal multiplexer (tmux/screen) detection
+  plugins/                         Claude Code plugin installation and discovery
   event/                           Telemetry (PostHog)
   pubsub/                          Internal pub/sub for cross-component messaging
   filetracker/                     Tracks files touched per session
@@ -122,6 +123,27 @@ This allows clipboard copy to work inside tmux without requiring
 `allow-passthrough on` in the tmux configuration. The passthrough
 formatting is unit-tested in `internal/ui/common/common_test.go` and
 end-to-end tested in `test/tmux_clipboard_e2e.sh`.
+
+## Claude Code Plugin Support
+
+The `internal/plugins` package provides installation and discovery for
+Claude Code plugins. Plugins are git repositories containing a
+`.claude-plugin/plugin.json` manifest and optionally a `skills/` directory
+with `SKILL.md` files.
+
+**Installation**: `crush plugin install <owner/repo>` clones the repository
+to `~/.config/crush/plugins/<name>`. The plugin's `skills/` directory is
+automatically added to the skills discovery path during config loading
+(`internal/config/load.go`), so installed plugin skills are available
+without manual configuration.
+
+**Listing**: `crush plugin list` shows all installed plugins with metadata
+parsed from their `.claude-plugin/plugin.json` manifests.
+
+**Auto-discovery**: `plugins.SkillsDirs()` scans the plugins directory at
+startup and returns all `skills/` subdirectories that exist. These are
+merged into `config.Options.SkillsPaths` alongside the built-in skill
+directories (`GlobalSkillsDirs()` and `ProjectSkillsDir()`).
 
 ## Build/Test/Lint Commands
 
