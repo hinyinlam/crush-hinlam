@@ -135,20 +135,22 @@ func skillLabel(skillPaths []string, workingDir string, skill *Skill) (string, S
 // plugin's skills/ directory (e.g.
 // ~/.config/crush/plugins/caveman/skills/) and returns the
 // plugin name. Returns empty string otherwise.
-func pluginNamespace(skillFile, basePath string) string {
-	// Walk up from basePath to find the plugins dir.
-	// Structure: .../plugins/<name>/skills/<dir>/SKILL.md
-	cleanFile := filepath.Clean(skillFile)
+func pluginNamespace(_ string, basePath string) string {
+	// Structure: .../crush/plugins/<name>/skills/<dir>/SKILL.md
 	cleanBase := filepath.Clean(basePath)
 
-	// basePath is the skills path (e.g. .../plugins/caveman/skills).
-	// The parent of basePath is the plugin dir.
+	// basePath is the skills directory.
+	// parent = plugin dir (e.g. .../plugins/caveman)
 	parent := filepath.Dir(cleanBase)
+	// grand = plugins dir (e.g. .../plugins)
 	grand := filepath.Dir(parent)
-	if filepath.Base(grand) == "plugins" {
+	// great = parent of plugins (e.g. .../crush)
+	great := filepath.Dir(grand)
+
+	// Only match when the structure is .../crush/plugins/<name>/skills
+	if filepath.Base(grand) == "plugins" && filepath.Base(great) == "crush" {
 		return filepath.Base(parent)
 	}
-	_ = cleanFile // skill path not needed for this detection
 	return ""
 }
 

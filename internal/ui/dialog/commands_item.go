@@ -149,3 +149,68 @@ func (c *CommandItem) Render(width int) string {
 	}
 	return rendered
 }
+
+// GroupHeaderItem renders a group separator between command groups
+// in the commands dialog. It is non-interactive (pressing Enter on it
+// does nothing).
+type GroupHeaderItem struct {
+	*list.Versioned
+	name  string
+	t     *styles.Styles
+	m     fuzzy.Match
+	cache map[int]string
+}
+
+var _ list.FilterableItem = &GroupHeaderItem{Versioned: list.NewVersioned()}
+var _ list.MatchSettable = &GroupHeaderItem{Versioned: list.NewVersioned()}
+
+// NewGroupHeaderItem creates a new group header item.
+func NewGroupHeaderItem(t *styles.Styles, name string) *GroupHeaderItem {
+	return &GroupHeaderItem{
+		Versioned: list.NewVersioned(),
+		name:      name,
+		t:         t,
+	}
+}
+
+// Finished implements list.Item. Group headers are immutable.
+func (g *GroupHeaderItem) Finished() bool {
+	return true
+}
+
+// Filter returns the group name for fuzzy filtering.
+func (g *GroupHeaderItem) Filter() string {
+	return g.name
+}
+
+// SetMatch implements list.MatchSettable.
+func (g *GroupHeaderItem) SetMatch(m fuzzy.Match) {
+	if sameFuzzyMatch(g.m, m) {
+		return
+	}
+	g.cache = nil
+	g.m = m
+	g.Bump()
+}
+
+// Render implements list.Item. Renders as a dim group separator line.
+func (g *GroupHeaderItem) Render(width int) string {
+	if g.cache != nil {
+		if cached, ok := g.cache[width]; ok {
+			return cached
+		}
+	}
+	if g.cache == nil {
+		g.cache = make(map[int]string)
+	}
+	label := " " + g.name + " "
+	sepWidth := max(1, (width-lipgloss.Width(label))/2)
+	line := strings.Repeat("─", sepWidth)
+	rendered := line + label + line
+	if lipgloss.Width(rendered) < width {
+		rendered += strings.Repeat("─", width-lipgloss.Width(rendered))
+	}
+	rendered = g.t.Dialog.SecondaryText.Render(rendered)
+	g.cache[width] = rendered
+	return rendered
+}

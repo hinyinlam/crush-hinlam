@@ -518,3 +518,85 @@ func TestFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestPluginNamespace(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		basePath  string
+		wantNS    string
+	}{
+		{
+			name:     "plugin skill under plugins dir",
+			basePath: "/root/.config/crush/plugins/caveman/skills",
+			wantNS:   "caveman",
+		},
+		{
+			name:     "user skill outside plugins",
+			basePath: "/root/.config/crush/skills",
+			wantNS:   "",
+		},
+		{
+			name:     "project skill outside plugins",
+			basePath: "/home/dev/project/.crush/skills",
+			wantNS:   "",
+		},
+		{
+			name:     "builtin skill",
+			basePath: "",
+			wantNS:   "",
+		},
+		{
+			name:     "multi-word plugin name",
+			basePath: "/home/user/.config/crush/plugins/superpowers/skills",
+			wantNS:   "superpowers",
+		},
+		{
+			name:     "nested path that contains plugins as subdir name",
+			basePath: "/home/user/projects/plugins/my-tools/skills",
+			wantNS:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ns := pluginNamespace("", tt.basePath)
+			require.Equal(t, tt.wantNS, ns)
+		})
+	}
+}
+
+func TestCatalogNamespace(t *testing.T) {
+	t.Parallel()
+
+	// Simulate skills from a plugin directory
+	skill := &Skill{
+		Name:           "caveman-review",
+		Description:    "review code caveman style",
+		SkillFilePath:  "/root/.config/crush/plugins/caveman/skills/caveman-review/SKILL.md",
+		UserInvocable:  false,
+	}
+	skillPaths := []string{
+		"/root/.config/crush/plugins/caveman/skills",
+		"/root/.config/crush/skills",
+	}
+
+	entries := Catalog([]*Skill{skill}, skillPaths, "/home/dev/work")
+	require.Len(t, entries, 1)
+	require.Equal(t, "caveman", entries[0].Namespace)
+	require.Equal(t, "caveman-review", entries[0].Name)
+
+	// Non-plugin skill
+	skill2 := &Skill{
+		Name:           "my-tool",
+		Description:    "a tool",
+		SkillFilePath:  "/root/.config/crush/skills/my-tool/SKILL.md",
+		UserInvocable:  true,
+	}
+	entries2 := Catalog([]*Skill{skill2}, skillPaths, "/home/dev/work")
+	require.Len(t, entries2, 1)
+	require.Empty(t, entries2[0].Namespace)
+	require.Equal(t, "my-tool", entries2[0].Name)
+}

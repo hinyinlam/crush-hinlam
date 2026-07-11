@@ -399,7 +399,15 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 			}
 			return strings.Compare(a.Name, b.Name)
 		})
+		var currentGroup string
 		for _, cmd := range sorted {
+			if cmd.Namespace != currentGroup {
+				currentGroup = cmd.Namespace
+				if currentGroup != "" {
+					commandItems = append(commandItems,
+						NewGroupHeaderItem(c.com.Styles, currentGroup))
+				}
+			}
 			var action Action
 			if cmd.Skill != nil {
 				action = ActionAttachSkill{ID: cmd.Skill.SkillFilePath, Name: cmd.Skill.Name}

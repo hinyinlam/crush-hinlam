@@ -112,3 +112,46 @@ func TestFromSkillCatalog_UsesDiscoveredSymlinkedSkills(t *testing.T) {
 	require.Equal(t, "linked-skill", cmds[0].Skill.Name)
 	require.Equal(t, filepath.Join(link, skills.SkillFileName), cmds[0].Skill.SkillFilePath)
 }
+
+func TestFromSkillCatalog_PluginSkillsAutoInvocable(t *testing.T) {
+	t.Parallel()
+
+	// Plugin skills (with namespace) are auto-included even without
+	// UserInvocable: true. Non-plugin skills still require explicit
+	// opt-in.
+	cmds := FromSkillCatalog([]skills.CatalogEntry{
+		{
+			ID:            "/plugins/caveman/skills/caveman/SKILL.md",
+			Name:          "caveman",
+			Description:   "Speak like caveman.",
+			Label:         "user:caveman",
+			Namespace:     "caveman",
+			UserInvocable: false,
+		},
+		{
+			ID:            "/plugins/caveman/skills/caveman-review/SKILL.md",
+			Name:          "caveman-review",
+			Description:   "Review code caveman style.",
+			Label:         "user:caveman-review",
+			Namespace:     "caveman",
+			UserInvocable: false,
+		},
+		{
+			ID:            "/skills/off/SKILL.md",
+			Name:          "off",
+			Description:   "Not invocable.",
+			Label:         "user:off",
+			Namespace:     "",
+			UserInvocable: false,
+		},
+	})
+
+	// Plugin skills (namespace != "") are auto-included
+	require.Len(t, cmds, 2)
+	require.Equal(t, "user:caveman", cmds[0].ID)
+	require.Equal(t, "caveman", cmds[0].Namespace)
+	require.Equal(t, "caveman", cmds[0].Skill.Name)
+	require.Equal(t, "user:caveman-review", cmds[1].ID)
+	require.Equal(t, "caveman", cmds[1].Namespace)
+	require.Equal(t, "caveman-review", cmds[1].Skill.Name)
+}
