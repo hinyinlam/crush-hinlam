@@ -171,9 +171,63 @@ func SkillsDirs() []string {
 	return dirs
 }
 
+// Remove deletes an installed plugin directory.
+func Remove(name string) error {
+	dest := filepath.Join(PluginsDir(), name)
+	if _, err := os.Stat(dest); os.IsNotExist(err) {
+		return fmt.Errorf("plugin %q is not installed", name)
+	}
+	if err := os.RemoveAll(dest); err != nil {
+		return fmt.Errorf("failed to remove plugin %q: %w", name, err)
+	}
+	return nil
+}
+
+// Update runs git pull on an installed plugin directory to fetch the
+// latest version. Returns the path and manifest after update.
+func Update(name string) (*InstalledPlugin, error) {
+	dest := filepath.Join(PluginsDir(), name)
+	if _, err := os.Stat(dest); os.IsNotExist(err) {
+		return nil, fmt.Errorf("plugin %q is not installed", name)
+	}
+
+	cmd := exec.Command("git", "-C", dest, "pull", "--ff-only")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("git pull failed for %q: %w\n%s", name, err, string(out))
+	}
+
+	manifest, err := readManifest(dest)
+	if err != nil {
+		manifest = &PluginManifest{Name: name}
+	}
+
+	return &InstalledPlugin{
+		Manifest: *manifest,
+		Path:     dest,
+	}, nil
+}
+
 // IsInstalled checks whether a plugin with the given name is installed.
 func IsInstalled(name string) bool {
 	path := filepath.Join(PluginsDir(), name)
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// Reinstall removes an installed plugin (if present) and performs a
+// fresh clone from the repository.
+func Reinstall(repo string) (*InstalledPlugin, error) {
+	_, name, err := ParseRepoShorthand(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	if IsInstalled(name) {
+		if err := Remove(name); err != nil {
+			return nil, err
+		}
+	}
+
+	return Install(repo)
 }

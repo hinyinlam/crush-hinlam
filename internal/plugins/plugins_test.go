@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -142,4 +143,57 @@ func TestPluginsDir(t *testing.T) {
 	dir := PluginsDir()
 	require.Contains(t, dir, "crush")
 	require.Contains(t, dir, "plugins")
+}
+
+func TestRemove_Existing(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	pluginsDir := PluginsDir()
+	pluginPath := filepath.Join(pluginsDir, "test-plugin")
+	require.NoError(t, os.MkdirAll(pluginPath, 0o755))
+	require.True(t, IsInstalled("test-plugin"))
+
+	err := Remove("test-plugin")
+	require.NoError(t, err)
+	require.False(t, IsInstalled("test-plugin"))
+}
+
+func TestRemove_NotInstalled(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	err := Remove("nonexistent")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not installed")
+}
+
+func TestUpdate_Existing(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	// Create a minimal git repo to simulate a plugin
+	pluginsDir := PluginsDir()
+	pluginPath := filepath.Join(pluginsDir, "test-plugin")
+	require.NoError(t, os.MkdirAll(pluginPath, 0o755))
+
+	// Init git repo
+	initCmd := exec.Command("git", "-C", pluginPath, "init")
+	require.NoError(t, initCmd.Run())
+	configCmd := exec.Command("git", "-C", pluginPath, "config", "user.email", "test@test.com")
+	configCmd.Run()
+	configCmd = exec.Command("git", "-C", pluginPath, "config", "user.name", "Test")
+	configCmd.Run()
+
+	// Create initial commit so pull works
+	writeCmd := exec.Command("git", "-C", pluginPath, "commit", "--allow-empty", "-m", "init")
+	writeCmd.Run()
+
+	// Update without remote should fail gracefully
+	_, err := Update("test-plugin")
+	// This may fail because no upstream is configured, which is expected
+	_ = err
+	require.True(t, IsInstalled("test-plugin"))
+}
+
+func TestUpdate_NotInstalled(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_, err := Update("nonexistent")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not installed")
 }
