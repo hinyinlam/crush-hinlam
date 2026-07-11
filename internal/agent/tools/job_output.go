@@ -62,6 +62,9 @@ func NewJobOutputTool() fantasy.AgentTool {
 			status := "running"
 			if done {
 				status = "completed"
+				if bgShell.TimedOut() {
+					status = "terminated (exceeded timeout)"
+				}
 				if err != nil {
 					exitCode := shell.ExitCode(err)
 					if exitCode != 0 {

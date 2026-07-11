@@ -3,6 +3,7 @@ package shell
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -18,6 +19,10 @@ const (
 	// CompletedJobRetentionMinutes is how long to keep completed jobs before auto-cleanup (8 hours)
 	CompletedJobRetentionMinutes = 8 * 60
 )
+
+// ErrBackgroundJobTimeout is the cause attached to a context that is cancelled
+// because the job exceeded its timeout.
+var ErrBackgroundJobTimeout = errors.New("background job exceeded its timeout")
 
 // syncBuffer is a thread-safe wrapper around bytes.Buffer.
 type syncBuffer struct {
@@ -59,6 +64,13 @@ type BackgroundShell struct {
 	completedAt atomic.Int64 // Unix timestamp when job completed (0 if still running)
 }
 
+// TimedOut reports whether the job was killed because it exceeded its
+// configured timeout.
+func (b *BackgroundShell) TimedOut() bool {
+	return errors.Is(b.exitErr, context.DeadlineExceeded) ||
+		errors.Is(b.exitErr, ErrBackgroundJobTimeout)
+}
+
 // BackgroundShellManager manages background shell instances.
 type BackgroundShellManager struct {
 	shells *csync.Map[string, *BackgroundShell]
@@ -86,7 +98,10 @@ func GetBackgroundShellManager() *BackgroundShellManager {
 }
 
 // Start creates and starts a new background shell with the given command.
-func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, blockFuncs []BlockFunc, command string, description string) (*BackgroundShell, error) {
+// A non-zero timeout attaches a deadline to the shell's context; when the
+// deadline fires the process group receives SIGINT (then SIGKILL after the
+// grace period). A zero timeout means no limit.
+func (m *BackgroundShellManager) Start(ctx context.Context, timeout time.Duration, workingDir string, blockFuncs []BlockFunc, command string, description string) (*BackgroundShell, error) {
 	// Check job limit
 	if m.shells.Len() >= MaxBackgroundJobs {
 		return nil, fmt.Errorf("maximum number of background jobs (%d) reached. Please terminate or wait for some jobs to complete", MaxBackgroundJobs)
@@ -99,7 +114,13 @@ func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, b
 		BlockFuncs: blockFuncs,
 	})
 
-	shellCtx, cancel := context.WithCancel(ctx)
+	var shellCtx context.Context
+	var cancel context.CancelFunc
+	if timeout > 0 {
+		shellCtx, cancel = context.WithTimeoutCause(ctx, timeout, ErrBackgroundJobTimeout)
+	} else {
+		shellCtx, cancel = context.WithCancel(ctx)
+	}
 
 	bgShell := &BackgroundShell{
 		ID:          id,

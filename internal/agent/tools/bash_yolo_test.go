@@ -34,11 +34,11 @@ func TestBashToolYoloToggle(t *testing.T) {
 func TestBashToolCreationYolo(t *testing.T) {
 	attr := &config.Attribution{}
 	psNoYolo := permission.NewPermissionService("/tmp", false, nil)
-	if tool := NewBashTool(psNoYolo, "/tmp", attr, "test-model"); tool == nil {
+	if tool := NewBashTool(psNoYolo, "/tmp", attr, "test-model", 0, 0); tool == nil {
 		t.Fatal("NewBashTool returned nil for non-yolo")
 	}
 	psYolo := permission.NewPermissionService("/tmp", true, nil)
-	if tool := NewBashTool(psYolo, "/tmp", attr, "test-model"); tool == nil {
+	if tool := NewBashTool(psYolo, "/tmp", attr, "test-model", 0, 0); tool == nil {
 		t.Fatal("NewBashTool returned nil for yolo")
 	}
 }

@@ -200,7 +200,7 @@ func blockFuncs(yolo bool) []shell.BlockFunc {
 	}
 }
 
-func NewBashTool(permissions permission.Service, workingDir string, attribution *config.Attribution, modelID string) fantasy.AgentTool {
+func NewBashTool(permissions permission.Service, workingDir string, attribution *config.Attribution, modelID string, toolTimeout time.Duration, backgroundTimeout time.Duration) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		BashToolName,
 		string(bashDescription(attribution, modelID, permissions.SkipRequests())),
@@ -258,7 +258,7 @@ func NewBashTool(permissions permission.Service, workingDir string, attribution 
 				bgManager := shell.GetBackgroundShellManager()
 				bgManager.Cleanup()
 				// Use background context so it continues after tool returns
-				bgShell, err := bgManager.Start(context.Background(), execWorkingDir, bf, params.Command, params.Description)
+				bgShell, err := bgManager.Start(context.Background(), backgroundTimeout, execWorkingDir, bf, params.Command, params.Description)
 				if err != nil {
 					return fantasy.ToolResponse{}, fmt.Errorf("error starting background shell: %w", err)
 				}
@@ -313,7 +313,8 @@ func NewBashTool(permissions permission.Service, workingDir string, attribution 
 			// Start with detached context so it can survive if moved to background
 			bgManager := shell.GetBackgroundShellManager()
 			bgManager.Cleanup()
-			bgShell, err := bgManager.Start(context.Background(), execWorkingDir, bf, params.Command, params.Description)
+			// Auto-backgrounded jobs inherit the tool timeout (e.g. 120s)
+			bgShell, err := bgManager.Start(context.Background(), toolTimeout, execWorkingDir, bf, params.Command, params.Description)
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error starting shell: %w", err)
 			}

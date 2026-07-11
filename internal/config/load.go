@@ -511,6 +511,7 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	if c.Options.ToolTimeoutSeconds <= 0 {
 		c.Options.ToolTimeoutSeconds = 120 // default 2 minutes
 	}
+	// BackgroundJobTimeoutSeconds defaults to 0 (no limit) — no override needed.
 	if len(c.Options.GlobalContextPaths) == 0 {
 		crushConfigDir := filepath.Dir(GlobalConfig())
 		c.Options.GlobalContextPaths = []string{
