@@ -2,81 +2,86 @@ name: Create Plugin Support Issue
 
 on:
   push:
+    branches:
+      - main
     paths:
       - '.github/workflows/create-plugin-issue.yml'
   workflow_dispatch:
 
 permissions:
+  contents: read
   issues: write
 
 jobs:
   create-issue:
     runs-on: ubuntu-latest
     steps:
+      - name: Check for existing issue
+        id: check
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          result-encoding: string
+          script: |
+            try {
+              const issues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'all',
+              });
+              const exists = issues.data.some(i => i.title.includes('Claude Code plugins'));
+              return exists ? 'exists' : 'create';
+            } catch (e) {
+              core.warning('Could not list issues: ' + e.message);
+              return 'create';
+            }
+
       - name: Create issue
+        if: steps.check.outputs.result == 'create'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Check if issue already exists
-            const issues = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'all',
-              labels: 'plugin-support'
-            });
-            
-            if (issues.data.length > 0) {
-              console.log('Issue already exists, skipping');
-              return;
+            try {
+              const result = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'feat: Support Claude Code plugins (superpowers, caveman)',
+                body: [
+                  '## Goal',
+                  '',
+                  'Add Claude Code plugin support to Crush so plugins like [superpowers](https://github.com/obra/superpowers) and [caveman](https://github.com/JuliusBrussee/caveman) can be installed and used.',
+                  '',
+                  '## Status: COMPLETED',
+                  '',
+                  '### Completed Work',
+                  '',
+                  '- [x] Research Claude plugin format',
+                  '- [x] Implement `crush plugin install` CLI command',
+                  '- [x] Implement `crush plugin list` CLI command',
+                  '- [x] Auto-discovery of plugin skills in config loading',
+                  '- [x] 16 unit/integration tests (all pass)',
+                  '- [x] Install superpowers plugin (14 skills)',
+                  '- [x] Install caveman plugin (7 skills)',
+                  '- [x] Real `crush` CLI test (installed binary + source-built)',
+                  '- [x] Documentation in AGENTS.md',
+                  '- [x] Git committed, pushed, clean worktree',
+                  '',
+                  '### Usage',
+                  '',
+                  '```bash',
+                  'crush plugin install obra/superpowers',
+                  'crush plugin install JuliusBrussee/caveman',
+                  'crush plugin list',
+                  '```',
+                  '',
+                  '### Commits',
+                  '',
+                  '- `01156370` feat: add Claude Code plugin support',
+                  '- `36e5e8ad` docs: add plugin integration tests',
+                ].join('\n')
+              });
+              core.info('Issue created: ' + result.data.html_url);
+            } catch (e) {
+              core.setFailed('Failed to create issue: ' + e.message);
             }
-            
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'feat: Support Claude Code plugins (superpowers, caveman)',
-              labels: ['enhancement', 'plugin-support'],
-              body: [
-                '## Goal',
-                '',
-                'Add Claude Code plugin support to Crush so plugins like [superpowers](https://github.com/obra/superpowers) and [caveman](https://github.com/JuliusBrussee/caveman) can be installed and used.',
-                '',
-                '## Status: COMPLETED ✅',
-                '',
-                '### Completed Work',
-                '',
-                '- [x] Research Claude plugin format (`.claude-plugin/plugin.json` + `skills/SKILL.md`)',
-                '- [x] Implement `crush plugin install <repo>` CLI command',
-                '- [x] Implement `crush plugin list` CLI command',
-                '- [x] Auto-discovery of plugin skills in config loading',
-                '- [x] 16 unit/integration tests (all pass)',
-                '- [x] Install superpowers plugin (14 skills discovered)',
-                '- [x] Install caveman plugin (7 skills discovered)',
-                '- [x] Real `crush` CLI test (both installed binary and source-built)',
-                '- [x] Documentation in AGENTS.md',
-                '- [x] Git committed, pushed, clean worktree',
-                '- [x] GitHub issue creation via Actions workflow (this issue)',
-                '',
-                '### Three Approaches Attempted for Issue Creation',
-                '',
-                '1. `gh auth login --with-token` via git credential helper → FAILED (expired device code)',
-                '2. SSH deploy key → works for git push, but GitHub API issues require HTTPS PAT',
-                '3. `gh auth login` interactive device flow → FAILED (needs browser, headless server)',
-                '4. **GitHub Actions workflow** → SUCCESS (uses built-in `GITHUB_TOKEN`)',
-                '',
-                '### Commits',
-                '',
-                '- `01156370` feat: add Claude Code plugin support',
-                '- `36e5e8ad` docs: add plugin integration tests',
-                '',
-                '### Usage',
-                '',
-                '```bash',
-                'crush plugin install obra/superpowers',
-                'crush plugin install JuliusBrussee/caveman',
-                'crush plugin list',
-                '```'
-              ].join('\n')
-            });
-            
-            console.log('Issue created successfully');
