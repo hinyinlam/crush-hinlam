@@ -30,6 +30,7 @@ func TestDetectFromEnv_Tmux(t *testing.T) {
 func TestDetectFromEnv_Screen(t *testing.T) {
 	t.Setenv("TMUX", "")
 	t.Setenv("STY", "12345.pts-0.host")
+	t.Setenv("ZELLIJ", "")
 	info, ok := detectFromEnv()
 	if !ok {
 		t.Fatal("expected detection from STY env")
@@ -45,9 +46,30 @@ func TestDetectFromEnv_Screen(t *testing.T) {
 	}
 }
 
+func TestDetectFromEnv_Zellij(t *testing.T) {
+	t.Setenv("TMUX", "")
+	t.Setenv("STY", "")
+	t.Setenv("ZELLIJ", "0")
+	t.Setenv("ZELLIJ_SESSION_NAME", "my-session")
+	info, ok := detectFromEnv()
+	if !ok {
+		t.Fatal("expected detection from ZELLIJ env")
+	}
+	if info.Type != "zellij" {
+		t.Fatalf("expected type zellij, got %q", info.Type)
+	}
+	if info.Session != "my-session" {
+		t.Fatalf("expected session name my-session, got %q", info.Session)
+	}
+	if !info.EnvWasSet {
+		t.Fatal("expected EnvWasSet to be true")
+	}
+}
+
 func TestDetectFromEnv_None(t *testing.T) {
 	t.Setenv("TMUX", "")
 	t.Setenv("STY", "")
+	t.Setenv("ZELLIJ", "")
 	info, ok := detectFromEnv()
 	if ok {
 		t.Fatal("expected no detection with empty env vars")
@@ -115,6 +137,7 @@ func TestMuxInfoDisplay(t *testing.T) {
 		{MuxInfo{Type: "tmux", Session: "0", Window: "0:1", EnvWasSet: true}, "tmux:0@0:1"},
 		{MuxInfo{Type: "tmux", Session: "0", Window: "0:1", EnvWasSet: false}, "tmux:0@0:1*"},
 		{MuxInfo{Type: "screen", Session: "12345.pts-0", EnvWasSet: true}, "screen:12345.pts-0"},
+		{MuxInfo{Type: "zellij", Session: "my-session", EnvWasSet: true}, "zellij:my-session"},
 	}
 	for _, tt := range tests {
 		got := tt.info.Display()
@@ -124,14 +147,15 @@ func TestMuxInfoDisplay(t *testing.T) {
 	}
 }
 
-func TestDetectMux_FromProc_InTmux(t *testing.T) {
+func TestDetectMux_FromProc_InMux(t *testing.T) {
 	os.Unsetenv("TMUX")
 	os.Unsetenv("STY")
+	os.Unsetenv("ZELLIJ")
 	info := detectFromProc()
 	if info.Type == "" {
-		t.Skip("not running inside tmux/screen")
+		t.Skip("not running inside tmux/screen/zellij")
 	}
-	if info.Type != "tmux" && info.Type != "screen" {
+	if info.Type != "tmux" && info.Type != "screen" && info.Type != "zellij" {
 		t.Fatalf("unexpected type: %q", info.Type)
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"os/exec"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/clipboard"
@@ -127,30 +129,63 @@ func CopyToClipboardWithCallback(text, successMessage string, callback tea.Cmd) 
 	} else {
 		cmds = append(cmds, util.ReportInfo(successMessage+" (via terminal OSC 52)"))
 	}
-	// When inside tmux, also send the OSC 52 sequence wrapped in tmux
-	// passthrough, because tmux eats unwrapped OSC 52 by default.
-	if mux := terminal.DetectMux(); mux.Type == "tmux" {
+	// Each multiplexer intercepts or drops OSC 52 from stdout differently.
+	// Use the mux-specific workaround to ensure the clipboard reaches the
+	// outer terminal.
+	switch mux := terminal.DetectMux(); mux.Type {
+	case "tmux":
 		cmds = append(cmds, func() tea.Msg {
-			writeOSC52WithTmuxPassthrough(text)
+			loadTmuxBuffer(text)
+			return nil
+		})
+	case "screen":
+		cmds = append(cmds, func() tea.Msg {
+			writeScreenDCSPassthrough(text)
+			return nil
+		})
+	case "zellij":
+		cmds = append(cmds, func() tea.Msg {
+			writeOSC52ToTTY(text)
 			return nil
 		})
 	}
 	return tea.Sequence(cmds...)
 }
 
-// writeOSC52WithTmuxPassthrough writes an OSC 52 clipboard set sequence
-// wrapped in tmux's DCS passthrough escape to stdout, bypassing tmux's
-// clipboard filtering. Without this wrapper, tmux silently discards OSC 52
-// sequences.
-func writeOSC52WithTmuxPassthrough(text string) {
-	os.Stdout.WriteString(buildOSC52TmuxPassthrough(text))
+// loadTmuxBuffer pipes text into `tmux load-buffer -`, setting tmux's
+// internal paste buffer. When set-clipboard is on or external (the default),
+// tmux then forwards the buffer contents to the outer terminal via OSC 52.
+// This works without requiring allow-passthrough, unlike DCS passthrough
+// escape sequences which tmux silently strips when allow-passthrough is off.
+func loadTmuxBuffer(text string) {
+	cmd := exec.Command("tmux", "load-buffer", "-")
+	cmd.Stdin = strings.NewReader(text)
+	_ = cmd.Run()
 }
 
-// buildOSC52TmuxPassthrough builds a tmux DCS passthrough-wrapped OSC 52
-// clipboard set sequence for the given text. Exported for testing.
-func buildOSC52TmuxPassthrough(text string) string {
-	// OSC 52 set clipboard: \e]52;c;<base64>\a
-	osc := "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(text)) + "\x07"
-	// tmux passthrough: \ePtmux;\e<sequence>\e\\
-	return "\x1bPtmux;\x1b" + osc + "\x1b\\"
+// writeScreenDCSPassthrough writes an OSC 52 clipboard sequence wrapped in
+// GNU screen's DCS passthrough to stdout. Unlike tmux, screen passes DCS
+// passthrough through to the outer terminal by default — no equivalent of
+// tmux's allow-passthrough setting exists. Screen does not natively recognize
+// OSC 52, so the DCS wrapper is required for the outer terminal to see it.
+func writeScreenDCSPassthrough(text string) {
+	b64 := base64.StdEncoding.EncodeToString([]byte(text))
+	// DCS passthrough: ESC P <escaped OSC 52> ESC \
+	// The OSC 52 inside is doubled (ESC ESC) so screen un-escapes it correctly.
+	os.Stdout.WriteString("\x1bP\x1b\x1b]52;c;" + b64 + "\x07\x1b\\")
+}
+
+// writeOSC52ToTTY writes a plain OSC 52 sequence directly to /dev/tty,
+// bypassing Zellij's interception of stdout OSC 52 sequences. Zellij
+// intercepts OSC 52 emitted on the PTY (stdout) but does not intercept
+// writes to the underlying terminal device. This requires the outer
+// terminal to support OSC 52.
+func writeOSC52ToTTY(text string) {
+	b64 := base64.StdEncoding.EncodeToString([]byte(text))
+	f, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString("\x1b]52;c;" + b64 + "\x07")
 }

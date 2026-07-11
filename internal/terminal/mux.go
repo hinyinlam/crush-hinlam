@@ -1,5 +1,5 @@
 // Package terminal provides terminal-related utilities including
-// multiplexer (tmux, screen) detection.
+// multiplexer (tmux, screen, zellij) detection.
 package terminal
 
 import (
@@ -13,7 +13,7 @@ import (
 
 // MuxInfo holds information about a detected terminal multiplexer.
 type MuxInfo struct {
-	// Type is the multiplexer type ("tmux", "screen", or "" if none).
+	// Type is the multiplexer type ("tmux", "screen", "zellij", or "" if none).
 	Type string
 	// Session is the session name (e.g. "0" for tmux, "12345.pts-0" for screen).
 	Session string
@@ -41,9 +41,9 @@ func (m MuxInfo) Display() string {
 }
 
 // DetectMux detects whether the current process is running inside a
-// terminal multiplexer (tmux or screen). It first checks environment
-// variables ($TMUX, $STY), then falls back to traversing the process
-// tree via /proc.
+// terminal multiplexer (tmux, screen, or zellij). It first checks
+// environment variables ($TMUX, $STY, $ZELLIJ), then falls back to
+// traversing the process tree via /proc.
 func DetectMux() MuxInfo {
 	if info, ok := detectFromEnv(); ok {
 		return info
@@ -51,8 +51,9 @@ func DetectMux() MuxInfo {
 	return detectFromProc()
 }
 
-// detectFromEnv checks the TMUX and STY environment variables. These can
-// be unset when privilege escalation (sudo, su) clears the environment.
+// detectFromEnv checks the TMUX, STY, and ZELLIJ environment variables.
+// These can be unset when privilege escalation (sudo, su) clears the
+// environment.
 func detectFromEnv() (MuxInfo, bool) {
 	if tmux := os.Getenv("TMUX"); tmux != "" {
 		info := MuxInfo{
@@ -77,11 +78,19 @@ func detectFromEnv() (MuxInfo, bool) {
 			EnvWasSet: true,
 		}, true
 	}
+	if zellij := os.Getenv("ZELLIJ"); zellij != "" {
+		info := MuxInfo{
+			Type:      "zellij",
+			EnvWasSet: true,
+		}
+		info.Session = os.Getenv("ZELLIJ_SESSION_NAME")
+		return info, true
+	}
 	return MuxInfo{}, false
 }
 
 // detectFromProc walks the process tree upward from the current PID,
-// checking each ancestor's comm name for tmux or screen.
+// checking each ancestor's comm name for tmux, screen, or zellij.
 func detectFromProc() MuxInfo {
 	pid := os.Getpid()
 	for depth := 0; depth < 64 && pid > 1; depth++ {
@@ -108,6 +117,11 @@ func detectFromProc() MuxInfo {
 			return MuxInfo{
 				Type:    "screen",
 				Session: resolveFromProcEnv("STY", identity),
+			}
+		case strings.HasPrefix(comm, "zellij"):
+			return MuxInfo{
+				Type:    "zellij",
+				Session: resolveFromProcEnv("ZELLIJ_SESSION_NAME", identity),
 			}
 		}
 		ppid := readProcPPID(pid)
