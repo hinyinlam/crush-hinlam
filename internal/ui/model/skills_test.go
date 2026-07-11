@@ -3,6 +3,7 @@ package model
 import (
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -78,4 +79,64 @@ func TestSkillStatusItemsExcludesDisabledSkills(t *testing.T) {
 		require.NotEqual(t, "go-doc", item.name)
 		require.NotEqual(t, "crush-config", item.name)
 	}
+}
+
+func TestHandleSkillSlashCommand(t *testing.T) {
+	t.Parallel()
+
+	st := uistyles.CharmtonePantera()
+	ui := &UI{
+		com: &common.Common{Styles: &st},
+		customCommands: []commands.CustomCommand{
+			{
+				ID:        "user:caveman",
+				Name:      "user:caveman",
+				Namespace: "caveman",
+				Skill: &skills.Skill{
+					Name:          "caveman",
+					Description:   "speak like caveman",
+					SkillFilePath: "/plugins/caveman/skills/caveman/SKILL.md",
+				},
+			},
+			{
+				ID:        "user:caveman-review",
+				Name:      "user:caveman-review",
+				Namespace: "caveman",
+				Skill: &skills.Skill{
+					Name:          "caveman-review",
+					Description:   "review code caveman style",
+					SkillFilePath: "/plugins/caveman/skills/caveman-review/SKILL.md",
+				},
+			},
+			{
+				ID:   "user:custom-cmd",
+				Name: "user:custom-cmd",
+			},
+		},
+	}
+
+	t.Run("namespace:skill match", func(t *testing.T) {
+		cmd := ui.handleSkillSlashCommand("caveman:caveman-review")
+		require.NotNil(t, cmd)
+	})
+
+	t.Run("bare skill name match", func(t *testing.T) {
+		cmd := ui.handleSkillSlashCommand("caveman")
+		require.NotNil(t, cmd)
+	})
+
+	t.Run("wrong namespace no match", func(t *testing.T) {
+		cmd := ui.handleSkillSlashCommand("wrong:caveman")
+		require.Nil(t, cmd)
+	})
+
+	t.Run("non-existent skill no match", func(t *testing.T) {
+		cmd := ui.handleSkillSlashCommand("nonexistent")
+		require.Nil(t, cmd)
+	})
+
+	t.Run("non-skill command no match", func(t *testing.T) {
+		cmd := ui.handleSkillSlashCommand("custom-cmd")
+		require.Nil(t, cmd)
+	})
 }

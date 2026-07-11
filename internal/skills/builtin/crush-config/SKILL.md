@@ -213,7 +213,17 @@ Other options: `context_paths`, `progress`, `disable_notifications`, `disable_au
 
 ## User-Invocable Skills
 
-Skills can be made invocable as commands from the commands palette. Add `user-invocable: true` to the skill's YAML frontmatter:
+Skills can be invoked as slash commands directly from the input prompt.
+There are two ways to access skills:
+
+**Plugin skills** (installed via `crush plugin install`) are automatically
+available as slash commands:
+
+- Namespaced form: `/plugin-name:skill-name` (e.g. `/caveman:caveman-review`)
+- Shorthand form: `/skill-name` (e.g. `/caveman-review`)
+
+**Non-plugin skills** (built-in, user, project) require explicit opt-in.
+Add `user-invocable: true` to the skill's YAML frontmatter:
 
 ```yaml
 ---
@@ -223,11 +233,14 @@ user-invocable: true
 ---
 ```
 
-User-invocable skills appear in the commands palette with a prefix:
+User-invocable skills also appear in the commands palette (`/` on empty
+input) with a prefix:
 - Skills from global directories: `user:skill-name`
 - Skills from project directories: `project:skill-name`
+- Plugin skills are grouped under their plugin name: `caveman > caveman-review`
 
-When invoked, the skill's instructions are loaded into the conversation context.
+When invoked, the skill's instructions are loaded into the conversation
+context.
 
 To prevent the model from auto-triggering a skill (while still allowing user invocation), add `disable-model-invocation: true`:
 

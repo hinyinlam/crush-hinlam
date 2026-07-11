@@ -24,6 +24,7 @@ type CatalogEntry struct {
 	Description   string     `json:"description"`
 	Label         string     `json:"label"`
 	Source        SourceType `json:"source"`
+	Namespace     string     `json:"namespace"`
 	UserInvocable bool       `json:"user_invocable"`
 }
 
@@ -47,13 +48,14 @@ var ErrSkillNotFound = errors.New("skill not found")
 func Catalog(active []*Skill, skillPaths []string, workingDir string) []CatalogEntry {
 	entries := make([]CatalogEntry, 0, len(active))
 	for _, skill := range active {
-		label, source := skillLabel(skillPaths, workingDir, skill)
+		label, source, namespace := skillLabel(skillPaths, workingDir, skill)
 		entries = append(entries, CatalogEntry{
 			ID:            skill.SkillFilePath,
 			Name:          skill.Name,
 			Description:   skill.Description,
 			Label:         label,
 			Source:        source,
+			Namespace:     namespace,
 			UserInvocable: skill.UserInvocable,
 		})
 	}
@@ -79,7 +81,7 @@ func ReadContent(active []*Skill, skillPaths []string, workingDir string, skillI
 		return nil, SkillReadResult{}, err
 	}
 
-	_, source := skillLabel(skillPaths, workingDir, skill)
+	_, source, _ := skillLabel(skillPaths, workingDir, skill)
 	result := SkillReadResult{
 		Name:        skill.Name,
 		Description: skill.Description,
@@ -103,9 +105,9 @@ func ReadContent(active []*Skill, skillPaths []string, workingDir string, skillI
 	return content, result, nil
 }
 
-func skillLabel(skillPaths []string, workingDir string, skill *Skill) (string, SourceType) {
+func skillLabel(skillPaths []string, workingDir string, skill *Skill) (string, SourceType, string) {
 	if skill.Builtin {
-		return string(SourceSystem) + ":" + skill.Name, SourceSystem
+		return string(SourceSystem) + ":" + skill.Name, SourceSystem, ""
 	}
 
 	cleanFile := filepath.Clean(skill.SkillFilePath)
@@ -122,10 +124,32 @@ func skillLabel(skillPaths []string, workingDir string, skill *Skill) (string, S
 			source = SourceProject
 			prefix = string(SourceProject) + ":"
 		}
-		return prefix + filepath.Base(filepath.Dir(cleanFile)), source
+		ns := pluginNamespace(cleanFile, cleanBase)
+		return prefix + filepath.Base(filepath.Dir(cleanFile)), source, ns
 	}
 
-	return string(SourceUser) + ":" + filepath.Base(filepath.Dir(cleanFile)), SourceUser
+	return string(SourceUser) + ":" + filepath.Base(filepath.Dir(cleanFile)), SourceUser, ""
+}
+
+// pluginNamespace detects if a skill file lives inside a
+// plugin's skills/ directory (e.g.
+// ~/.config/crush/plugins/caveman/skills/) and returns the
+// plugin name. Returns empty string otherwise.
+func pluginNamespace(skillFile, basePath string) string {
+	// Walk up from basePath to find the plugins dir.
+	// Structure: .../plugins/<name>/skills/<dir>/SKILL.md
+	cleanFile := filepath.Clean(skillFile)
+	cleanBase := filepath.Clean(basePath)
+
+	// basePath is the skills path (e.g. .../plugins/caveman/skills).
+	// The parent of basePath is the plugin dir.
+	parent := filepath.Dir(cleanBase)
+	grand := filepath.Dir(parent)
+	if filepath.Base(grand) == "plugins" {
+		return filepath.Base(parent)
+	}
+	_ = cleanFile // skill path not needed for this detection
+	return ""
 }
 
 func escapesParent(rel string) bool {

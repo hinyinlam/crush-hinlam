@@ -23,6 +23,8 @@ type CommandItem struct {
 	m           fuzzy.Match
 	cache       map[int]string
 	focused     bool
+	// Group is the parent namespace (e.g. "caveman") for grouping.
+	Group string
 }
 
 var _ ListItem = &CommandItem{Versioned: list.NewVersioned()}
@@ -58,11 +60,20 @@ func (c *CommandItem) WithDescription(desc string) *CommandItem {
 	return c
 }
 
+// WithGroup sets the group namespace for this command item.
+func (c *CommandItem) WithGroup(group string) *CommandItem {
+	c.Group = group
+	return c
+}
+
 // Filter implements ListItem.
 func (c *CommandItem) Filter() string {
 	base := c.title
+	if c.Group != "" {
+		base = c.Group + ":" + c.title
+	}
 	if len(c.aliases) > 0 {
-		base = c.title + " " + strings.Join(c.aliases, " ")
+		base = base + " " + strings.Join(c.aliases, " ")
 	}
 	if c.description != "" {
 		base = base + " " + c.description
@@ -117,7 +128,11 @@ func (c *CommandItem) Render(width int) string {
 		InfoTextBlurred: c.t.Dialog.ListItem.InfoBlurred,
 		InfoTextFocused: c.t.Dialog.ListItem.InfoFocused,
 	}
-	rendered := renderItem(styles, c.title, c.shortcut, c.focused, width, c.cache, &c.m)
+	title := c.title
+	if c.Group != "" {
+		title = c.Group + " > " + c.title
+	}
+	rendered := renderItem(styles, title, c.shortcut, c.focused, width, c.cache, &c.m)
 	if c.description != "" {
 		descStyle := c.t.Dialog.SecondaryText
 		if c.focused {

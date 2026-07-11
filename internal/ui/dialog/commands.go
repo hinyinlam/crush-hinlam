@@ -2,6 +2,7 @@ package dialog
 
 import (
 	"os"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -389,7 +390,16 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 			commandItems = append(commandItems, cmd)
 		}
 	case UserCommands:
-		for _, cmd := range c.customCommands {
+		// Sort by namespace then by name for grouping.
+		sorted := make([]commands.CustomCommand, len(c.customCommands))
+		copy(sorted, c.customCommands)
+		slices.SortFunc(sorted, func(a, b commands.CustomCommand) int {
+			if a.Namespace != b.Namespace {
+				return strings.Compare(a.Namespace, b.Namespace)
+			}
+			return strings.Compare(a.Name, b.Name)
+		})
+		for _, cmd := range sorted {
 			var action Action
 			if cmd.Skill != nil {
 				action = ActionAttachSkill{ID: cmd.Skill.SkillFilePath, Name: cmd.Skill.Name}
@@ -400,7 +410,7 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 					Skill:     cmd.Skill,
 				}
 			}
-			item := NewCommandItem(c.com.Styles, "custom_"+cmd.ID, cmd.Name, "", action)
+			item := NewCommandItem(c.com.Styles, "custom_"+cmd.ID, cmd.Name, "", action).WithGroup(cmd.Namespace)
 			if cmd.Skill != nil {
 				item = item.WithDescription(cmd.Skill.Description)
 			}

@@ -230,9 +230,9 @@ type UI struct {
 	// Escape works for bang commands the same way it does for agent runs.
 	bangCancel context.CancelFunc
 
-	header *header
-	mux    terminal.MuxInfo // cached multiplexer detection result
-	trackingMode int        // 0 = session activity (Modified Files), 1 = git status (Git Status)
+	header       *header
+	mux          terminal.MuxInfo // cached multiplexer detection result
+	trackingMode int              // 0 = session activity (Modified Files), 1 = git status (Git Status)
 
 	// sendProgressBar instructs the TUI to send progress bar updates to the
 	// terminal.
@@ -2191,6 +2191,13 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					return m.handleTrackingModeCommand(value)
 				}
 
+				if strings.HasPrefix(value, "/") {
+					token := strings.SplitN(value[1:], " ", 2)[0]
+					if cmd := m.handleSkillSlashCommand(token); cmd != nil {
+						return cmd
+					}
+				}
+
 				attachments := m.attachments.List()
 				m.attachments.Reset()
 				if len(value) == 0 && !message.ContainsTextAttachment(attachments) {
@@ -3548,6 +3555,35 @@ func (m *UI) attachSkill(skillID, name string) tea.Cmd {
 			Content:  content,
 		}
 	}
+}
+
+// handleSkillSlashCommand handles /namespace:skill or /skill-name
+// patterns that map to user-invocable skills loaded from plugins and
+// configuration.
+func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
+	var namespace, skillName string
+	if idx := strings.Index(token, ":"); idx >= 0 {
+		namespace = token[:idx]
+		skillName = token[idx+1:]
+	} else {
+		skillName = token
+	}
+
+	for _, cmd := range m.customCommands {
+		if cmd.Skill == nil {
+			continue
+		}
+		if namespace != "" {
+			if cmd.Namespace == namespace && cmd.Skill.Name == skillName {
+				return m.attachSkill(cmd.Skill.SkillFilePath, cmd.Skill.Name)
+			}
+		} else {
+			if cmd.Skill.Name == skillName {
+				return m.attachSkill(cmd.Skill.SkillFilePath, cmd.Skill.Name)
+			}
+		}
+	}
+	return nil
 }
 
 // handleGoalCommand parses /goal subcommands: set a condition, show

@@ -46,8 +46,11 @@ type CustomCommand struct {
 	Name      string
 	Content   string
 	Arguments []Argument
-	// Skill is set when this command represents a user-invocable skill
+	// Skill is set when this command represents a user-invocable skill.
 	Skill *skills.Skill
+	// Namespace is the plugin name when this command comes from a
+	// plugin skill (e.g. "caveman"). Empty for non-plugin skills.
+	Namespace string
 }
 
 type commandSource struct {
@@ -63,10 +66,13 @@ func LoadCustomCommands(cfg *config.Config) ([]CustomCommand, error) {
 
 // FromSkillCatalog converts user-invocable catalog entries into custom
 // command entries for the command palette.
+// Plugin skills (those with a namespace) are automatically treated as
+// user-invocable. Non-plugin skills must explicitly set
+// user-invocable: true in their SKILL.md.
 func FromSkillCatalog(entries []skills.CatalogEntry) []CustomCommand {
 	commands := make([]CustomCommand, 0, len(entries))
 	for _, entry := range entries {
-		if !entry.UserInvocable {
+		if !entry.UserInvocable && entry.Namespace == "" {
 			continue
 		}
 		name := entry.Label
@@ -74,8 +80,9 @@ func FromSkillCatalog(entries []skills.CatalogEntry) []CustomCommand {
 			name = userCommandPrefix + entry.Name
 		}
 		commands = append(commands, CustomCommand{
-			ID:   name,
-			Name: name,
+			ID:        name,
+			Name:      name,
+			Namespace: entry.Namespace,
 			Skill: &skills.Skill{
 				Name:          entry.Name,
 				Description:   entry.Description,

@@ -168,6 +168,24 @@ startup and returns all `skills/` subdirectories that exist. These are
 merged into `config.Options.SkillsPaths` alongside the built-in skill
 directories (`GlobalSkillsDirs()` and `ProjectSkillsDir()`).
 
+### Plugin Slash Commands
+
+Plugin skills automatically become slash commands. Each skill defined in a
+plugin's `skills/` directory gets a `/` command:
+
+- **Namespaced**: `/plugin-name:skill-name` — e.g. `/caveman:caveman-review`
+- **Bare shorthand**: `/skill-name` — e.g. `/caveman-review`
+  (shorthand when unambiguous)
+
+Plugins are auto-namespaced by their installation directory name under
+`~/.config/crush/plugins/`. Skills from non-plugin sources (built-in,
+user, project) can opt into slash commands by setting
+`user-invocable: true` in their `SKILL.md` YAML frontmatter.
+
+The namespace detection is in `internal/skills/catalog.go:pluginNamespace()`,
+slash command matching in `internal/ui/model/ui.go:handleSkillSlashCommand()`,
+and command palette grouping in `internal/ui/dialog/commands.go:setCommandItems()`.
+
 ## Build/Test/Lint Commands
 
 - **Build**: `go build .` or `go run .`
