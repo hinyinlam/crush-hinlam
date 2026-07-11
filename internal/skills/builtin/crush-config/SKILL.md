@@ -234,10 +234,11 @@ user-invocable: true
 ```
 
 User-invocable skills also appear in the commands palette (`/` on empty
-input) with a prefix:
+input):
 - Skills from global directories: `user:skill-name`
 - Skills from project directories: `project:skill-name`
-- Plugin skills are grouped under their plugin name: `caveman > caveman-review`
+- Plugin skills are visually grouped under `── plugin-name ──` separator
+  headers, with each item shown as `plugin-name > skill-name`
 
 When invoked, the skill's instructions are loaded into the conversation
 context.

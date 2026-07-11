@@ -3559,7 +3559,9 @@ func (m *UI) attachSkill(skillID, name string) tea.Cmd {
 
 // handleSkillSlashCommand handles /namespace:skill or /skill-name
 // patterns that map to user-invocable skills loaded from plugins and
-// configuration.
+// configuration. It first tries a direct workspace skill catalog
+// lookup (always available), then falls back to the async-loaded
+// custom commands cache.
 func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
 	var namespace, skillName string
 	if idx := strings.Index(token, ":"); idx >= 0 {
@@ -3569,6 +3571,30 @@ func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
 		skillName = token
 	}
 
+	// Approach 1: direct workspace skill lookup (reliable, always available).
+	if m.com != nil && m.com.Workspace != nil {
+		entries, err := m.com.Workspace.ListSkills(context.Background())
+		if err == nil {
+			for _, entry := range entries {
+				// Plugin skills are auto-invocable; non-plugin skills
+				// require explicit opt-in.
+				if !entry.UserInvocable && entry.Namespace == "" {
+					continue
+				}
+				if namespace != "" {
+					if entry.Namespace == namespace && entry.Name == skillName {
+						return m.attachSkill(entry.ID, entry.Name)
+					}
+				} else {
+					if entry.Name == skillName {
+						return m.attachSkill(entry.ID, entry.Name)
+					}
+				}
+			}
+		}
+	}
+
+	// Approach 2 (fallback): async-loaded custom commands cache.
 	for _, cmd := range m.customCommands {
 		if cmd.Skill == nil {
 			continue

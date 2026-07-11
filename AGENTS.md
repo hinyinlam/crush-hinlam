@@ -182,9 +182,21 @@ Plugins are auto-namespaced by their installation directory name under
 user, project) can opt into slash commands by setting
 `user-invocable: true` in their `SKILL.md` YAML frontmatter.
 
-The namespace detection is in `internal/skills/catalog.go:pluginNamespace()`,
-slash command matching in `internal/ui/model/ui.go:handleSkillSlashCommand()`,
-and command palette grouping in `internal/ui/dialog/commands.go:setCommandItems()`.
+Slash command resolution uses a two-pronged approach:
+1. Direct workspace skill catalog lookup (always available, primary path)
+2. Async-loaded custom commands cache (fallback)
+
+The commands dialog (`/` on empty input) shows plugin skills grouped
+under `── plugin-name ──` separator headers, sorted alphabetically within
+each group. Non-plugin skills appear without a group header.
+
+The namespace detection is in `internal/skills/catalog.go:pluginNamespace()`
+(matches `.../crush/plugins/<name>/skills` structure), slash command
+matching in `internal/ui/model/ui.go:handleSkillSlashCommand()`, and
+command palette grouping in
+`internal/ui/dialog/commands.go:setCommandItems()` with
+`GroupHeaderItem` separators defined in
+`internal/ui/dialog/commands_item.go`.
 
 ## Build/Test/Lint Commands
 
