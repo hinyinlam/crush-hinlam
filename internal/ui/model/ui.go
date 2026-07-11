@@ -2192,6 +2192,13 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 
 				if strings.HasPrefix(value, "/") {
+					// Bare "/" with Enter opens the commands dialog.
+					if value == "/" {
+						if cmd := m.openCommandsDialog(); cmd != nil {
+							return cmd
+						}
+						return nil
+					}
 					parts := strings.SplitN(value[1:], " ", 2)
 					token := parts[0]
 					var args string
@@ -2256,13 +2263,9 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				if cmd != nil {
 					cmds = append(cmds, cmd)
 				}
-			case key.Matches(msg, m.keyMap.Editor.Escape):
+				case key.Matches(msg, m.keyMap.Editor.Escape):
 				cmd := m.handleHistoryEscape(msg)
 				if cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-			case key.Matches(msg, m.keyMap.Editor.Commands) && m.textarea.Value() == "":
-				if cmd := m.openCommandsDialog(); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
 			default:
