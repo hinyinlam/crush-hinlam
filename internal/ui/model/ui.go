@@ -3562,6 +3562,8 @@ func (m *UI) attachSkill(skillID, name string) tea.Cmd {
 // configuration. It first tries a direct workspace skill catalog
 // lookup (always available), then falls back to the async-loaded
 // custom commands cache.
+// When a match is found, the skill content is injected as a user
+// message (matching Claude Code's behavior), not as a file attachment.
 func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
 	var namespace, skillName string
 	if idx := strings.Index(token, ":"); idx >= 0 {
@@ -3571,23 +3573,21 @@ func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
 		skillName = token
 	}
 
-	// Approach 1: direct workspace skill lookup (reliable, always available).
+	// Approach 1: direct workspace skill lookup.
 	if m.com != nil && m.com.Workspace != nil {
 		entries, err := m.com.Workspace.ListSkills(context.Background())
 		if err == nil {
 			for _, entry := range entries {
-				// Plugin skills are auto-invocable; non-plugin skills
-				// require explicit opt-in.
 				if !entry.UserInvocable && entry.Namespace == "" {
 					continue
 				}
 				if namespace != "" {
 					if entry.Namespace == namespace && entry.Name == skillName {
-						return m.attachSkill(entry.ID, entry.Name)
+						return m.invokeSkillAsMessage(entry.ID, entry.Name)
 					}
 				} else {
 					if entry.Name == skillName {
-						return m.attachSkill(entry.ID, entry.Name)
+						return m.invokeSkillAsMessage(entry.ID, entry.Name)
 					}
 				}
 			}
@@ -3601,15 +3601,35 @@ func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
 		}
 		if namespace != "" {
 			if cmd.Namespace == namespace && cmd.Skill.Name == skillName {
-				return m.attachSkill(cmd.Skill.SkillFilePath, cmd.Skill.Name)
+				return m.invokeSkillAsMessage(cmd.Skill.SkillFilePath, cmd.Skill.Name)
 			}
 		} else {
 			if cmd.Skill.Name == skillName {
-				return m.attachSkill(cmd.Skill.SkillFilePath, cmd.Skill.Name)
+				return m.invokeSkillAsMessage(cmd.Skill.SkillFilePath, cmd.Skill.Name)
 			}
 		}
 	}
 	return nil
+}
+
+// invokeSkillAsMessage reads a skill file, formats it as a loaded-skill
+// XML user message (matching Claude Code's skill injection behavior),
+// and sends it into the conversation.
+func (m *UI) invokeSkillAsMessage(skillID, name string) tea.Cmd {
+	return func() tea.Msg {
+		content, result, err := m.com.Workspace.ReadSkill(context.Background(), skillID)
+		if err != nil {
+			return util.NewErrorMsg(err)
+		}
+		skill, err := skills.ParseContent(content)
+		if err != nil {
+			return util.NewErrorMsg(fmt.Errorf("parse skill %q: %w", name, err))
+		}
+		skill.Name = result.Name
+		skill.Description = result.Description
+		skill.SkillFilePath = skillID
+		return sendMessageMsg{Content: skill.FormatInvocation()}
+	}
 }
 
 // handleGoalCommand parses /goal subcommands: set a condition, show
