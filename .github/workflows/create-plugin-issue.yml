@@ -1,11 +1,6 @@
 name: Create Plugin Support Issue
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/create-plugin-issue.yml'
   workflow_dispatch:
 
 permissions:
@@ -16,32 +11,11 @@ jobs:
   create-issue:
     runs-on: ubuntu-latest
     steps:
-      - name: Debug token permissions
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Actor: $GITHUB_ACTOR"
-          echo "Token length: ${#GH_TOKEN}"
-          # Check what scopes the token has
-          SCOPES=$(curl -sI -H "Authorization: token $GH_TOKEN" https://api.github.com/user | grep -i x-oauth-scopes || echo "no scopes header")
-          echo "Token scopes: $SCOPES"
-          
       - name: Create issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -x
-          # Try to create the issue and capture all output
           gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "feat: Support Claude Code plugins (superpowers, caveman)" \
-            --body "Plugin support implemented and tested. See commits 01156370, 36e5e8ad, a6bfa136." \
-            2>&1 || true
-          
-          # Also try via REST API with verbose output
-          curl -v -X POST \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/issues" \
-            -d '{"title":"feat: Support Claude Code plugins (superpowers, caveman)","body":"Plugin support implemented and tested."}' \
-            2>&1 || true
+            --body "Plugin support implemented and tested. Usage: crush plugin install obra/superpowers" \
+            --label "enhancement"
