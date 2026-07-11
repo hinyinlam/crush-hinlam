@@ -55,3 +55,4 @@ manpages/
 completions/crush.*sh
 .prettierignore
 .task
+AGENTS.original.md

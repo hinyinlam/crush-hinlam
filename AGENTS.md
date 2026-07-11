@@ -2,14 +2,9 @@
 
 ## Project Overview
 
-Crush is a terminal-based AI coding assistant built in Go by
-[Charm](https://charm.land). It connects to LLMs and gives them tools to read,
-write, and execute code. It supports multiple providers (Anthropic, OpenAI,
-Gemini, Bedrock, Copilot, Hyper, MiniMax, Vercel, and more), integrates with
-LSPs for code intelligence, and supports extensibility via MCP servers and
-agent skills.
+Crush is terminal AI coding assistant built in Go by [Charm](https://charm.land). Connects to LLMs, gives them tools to read, write, execute code. Supports providers (Anthropic, OpenAI, Gemini, Bedrock, Copilot, Hyper, MiniMax, Vercel, etc.), integrates LSPs for code intelligence, extensibility via MCP servers + agent skills.
 
-The module path is `github.com/charmbracelet/crush`.
+Module path: `github.com/charmbracelet/crush`.
 
 ## Architecture
 
@@ -54,202 +49,115 @@ internal/
 
 ### Key Dependency Roles
 
-- **`charm.land/fantasy`**: LLM provider abstraction layer. Handles protocol
-  differences between Anthropic, OpenAI, Gemini, etc. Used in `internal/app`
-  and `internal/agent`.
-- **`charm.land/bubbletea/v2`**: TUI framework powering the interactive UI.
+- **`charm.land/fantasy`**: LLM provider abstraction. Handles protocol differences between Anthropic, OpenAI, Gemini, etc. Used in `internal/app` + `internal/agent`.
+- **`charm.land/bubbletea/v2`**: TUI framework.
 - **`charm.land/lipgloss/v2`**: Terminal styling.
-- **`charm.land/glamour/v2`**: Markdown rendering in the terminal.
+- **`charm.land/glamour/v2`**: Markdown rendering in terminal.
 - **`charm.land/catwalk`**: Snapshot/golden-file testing for TUI components.
 - **`sqlc`**: Generates Go code from SQL queries in `internal/db/sql/`.
 
 ### Key Patterns
 
-- **Config is a Service**: accessed via `config.Service`, not global state.
-- **Tools are self-documenting**: each tool has a `.go` implementation and a
-  `.md` description file in `internal/agent/tools/`.
-- **System prompts are Go templates**: `internal/agent/templates/*.md.tpl`
-  with runtime data injected.
-- **Context files**: Crush reads AGENTS.md, CRUSH.md, CLAUDE.md, GEMINI.md
-  (and `.local` variants) from the working directory for project-specific
-  instructions.
-- **Persistence**: SQLite + sqlc. All queries live in `internal/db/sql/`,
-  generated code in `internal/db/`. Migrations in `internal/db/migrations/`.
-- **Pub/sub**: `internal/pubsub` for decoupled communication between agent,
-  UI, and services.
-- **Hooks**: User-defined shell commands in `crush.json` that fire before
-  tool execution. The engine (`internal/hooks/`) is independent of fantasy
-  and agent — it takes inputs, runs commands, returns decisions. The
-  `hookedTool` decorator in `internal/agent/hooked_tool.go` wraps tools at
-  the coordinator level. Hooks run before permission checks. See
-  `HOOKS.md` for the user-facing protocol.
-- **CGO disabled**: builds with `CGO_ENABLED=0` and
-  `GOEXPERIMENT=greenteagc`.
+- **Config is Service**: accessed via `config.Service`, not global state.
+- **Tools self-documenting**: each tool has `.go` implementation + `.md` description in `internal/agent/tools/`.
+- **System prompts are Go templates**: `internal/agent/templates/*.md.tpl` with runtime data injected.
+- **Context files**: Crush reads AGENTS.md, CRUSH.md, CLAUDE.md, GEMINI.md (and `.local` variants) from working directory for project instructions.
+- **Persistence**: SQLite + sqlc. Queries in `internal/db/sql/`, generated code in `internal/db/`. Migrations in `internal/db/migrations/`.
+- **Pub/sub**: `internal/pubsub` for decoupled communication between agent, UI, services.
+- **Hooks**: User-defined shell commands in `crush.json` fire before tool execution. Engine (`internal/hooks/`) independent of fantasy + agent — takes inputs, runs commands, returns decisions. `hookedTool` decorator in `internal/agent/hooked_tool.go` wraps tools at coordinator level. Hooks run before permission checks. See `HOOKS.md`.
+- **CGO disabled**: builds with `CGO_ENABLED=0` + `GOEXPERIMENT=greenteagc`.
 
 ## Terminal Multiplexer Detection
 
-The `internal/terminal` package detects whether Crush is running inside a
-terminal multiplexer (tmux, screen, or zellij). Detection uses two
-strategies:
+`internal/terminal` detects if Crush runs inside tmux, screen, or zellij. Two strategies:
 
-1. **Environment variables** (fast path): checks `$TMUX`, `$STY`, and
-   `$ZELLIJ`.
-2. **Process tree traversal** (fallback): walks `/proc/{pid}/status` and
-   `/proc/{pid}/comm` upward from the current PID to find a `tmux`,
-   `screen`, or `zellij` ancestor. This works even when sudo/su clears
-   environment variables.
+1. **Environment variables** (fast path): checks `$TMUX`, `$STY`, `$ZELLIJ`.
+2. **Process tree traversal** (fallback): walks `/proc/{pid}/status` + `/proc/{pid}/comm` upward from current PID to find tmux/screen/zellij ancestor. Works even when sudo/su clears env vars.
 
-When tmux is detected via `/proc` fallback, the package also reads the
-original `$TMUX` value from ancestor process environments and may query
-the tmux socket for the current window name (`tmux -S <socket>
-display-message -p '#{window_name}'`).
+When tmux detected via `/proc`, package reads original `$TMUX` from ancestor process envs and may query tmux socket for window name (`tmux -S <socket> display-message -p '#{window_name}'`).
 
-The detection result is displayed in the compact header and sidebar as
-`tmux:session@window` (e.g. `tmux:0@main`). An asterisk suffix indicates
-the detection came from `/proc` traversal rather than environment
-variables.
+Result displayed in compact header + sidebar as `tmux:session@window` (e.g. `tmux:0@main`). Asterisk suffix = detection from `/proc` traversal rather than env vars.
 
 ## Clipboard and Multiplexer Integration
 
-Crush copies text to the system clipboard using multiple strategies,
-depending on the environment:
+Crush copies text to system clipboard via multiple strategies:
 
-1. **OSC 52 via Bubble Tea's `SetClipboard`** — sends a plain
-   `\e]52;c;<base64>\a` escape sequence. This works in terminals that
-   support OSC 52 directly (iTerm2, Kitty, Alacritty, GNOME Terminal,
-   etc.) and inside tmux when `set-clipboard` is `on`.
+1. **OSC 52 via Bubble Tea's `SetClipboard`** — sends `\e]52;c;<base64>\a` escape sequence. Works in terminals supporting OSC 52 (iTerm2, Kitty, Alacritty, GNOME Terminal, etc.) + inside tmux when `set-clipboard` is `on`.
 
-2. **Multiplexer-specific workarounds** — each mux intercepts or drops
-   OSC 52 from stdout differently, so `CopyToClipboard` in
-   `internal/ui/common/common.go` applies a tailored workaround based on
-   `terminal.DetectMux()`:
+2. **Multiplexer-specific workarounds** — each mux drops OSC 52 differently; `CopyToClipboard` in `internal/ui/common/common.go` applies tailored workaround based on `terminal.DetectMux()`:
 
    | Mux | Env var | Strategy | Why |
    |-----|---------|----------|-----|
-   | **tmux** | `$TMUX` | `tmux load-buffer -` | tmux drops incoming OSC 52 when `set-clipboard=external` (default). `load-buffer` sets tmux's internal buffer, which it then forwards to the outer terminal via its own OSC 52. |
-   | **screen** | `$STY` | DCS passthrough to stdout | Screen doesn't recognize OSC 52 natively, but forwards DCS passthrough (`ESC P ... ESC \\`) to the outer terminal by default — no config needed. |
-   | **zellij** | `$ZELLIJ` | OSC 52 to `/dev/tty` | Zellij intercepts OSC 52 from stdout but not from writes to the terminal device. Writing to `/dev/tty` bypasses the interception. |
+   | **tmux** | `$TMUX` | `tmux load-buffer -` | tmux drops incoming OSC 52 when `set-clipboard=external` (default). `load-buffer` sets tmux's internal buffer, forwards to outer terminal via own OSC 52. |
+   | **screen** | `$STY` | DCS passthrough to stdout | Screen doesn't recognize OSC 52 natively, forwards DCS passthrough (`ESC P ... ESC \\`) to outer terminal by default — no config needed. |
+   | **zellij** | `$ZELLIJ` | OSC 52 to `/dev/tty` | Zellij intercepts OSC 52 from stdout not from terminal device. Writing to `/dev/tty` bypasses interception. |
 
-3. **Native clipboard fallback** — when a display server is available
-   (X11 or Wayland), the `golang.design/x/clipboard` package provides
-   native clipboard access. In headless environments (no `DISPLAY` or
-   `WAYLAND_DISPLAY`), only the OSC 52 paths are used.
+3. **Native clipboard fallback** — when display server available (X11 or Wayland), `golang.design/x/clipboard` provides native access. Headless envs (no `DISPLAY` or `WAYLAND_DISPLAY`) use only OSC 52 paths.
 
 ### Why not DCS passthrough for tmux?
 
-An earlier version used DCS passthrough for tmux. This requires
-`allow-passthrough on` in the tmux config, which is **off** by default
-(tmux 3.3+). With the default setting, tmux silently strips DCS
-passthrough sequences. The `tmux load-buffer` approach works regardless
-of `allow-passthrough` and does not require any tmux configuration
-changes.
+Earlier version used DCS passthrough. Requires `allow-passthrough on` in tmux config, **off** by default (tmux 3.3+). Default setting silently strips DCS passthrough. `tmux load-buffer` works regardless of `allow-passthrough`, no config changes needed.
 
-Note: GNU screen's DCS passthrough works by default (no equivalent of
-`allow-passthrough` exists), so the DCS approach is correct for screen.
+Note: GNU screen's DCS passthrough works by default (no equivalent of `allow-passthrough`), so DCS approach correct for screen.
 
 ## Claude Code Plugin Support
 
-The `internal/plugins` package provides installation and discovery for
-Claude Code plugins. Plugins are git repositories containing a
-`.claude-plugin/plugin.json` manifest and optionally a `skills/` directory
-with `SKILL.md` files.
+`internal/plugins` provides installation + discovery for Claude Code plugins. Plugins are git repos with `.claude-plugin/plugin.json` manifest + optional `skills/` directory with `SKILL.md` files.
 
-**Installation**: `crush plugin install <owner/repo>` clones the repository
-to `~/.config/crush/plugins/<name>`. The plugin's `skills/` directory is
-automatically added to the skills discovery path during config loading
-(`internal/config/load.go`), so installed plugin skills are available
-without manual configuration.
+**Installation**: `crush plugin install <owner/repo>` clones to `~/.config/crush/plugins/<name>`. Plugin's `skills/` auto-added to discovery path during config loading (`internal/config/load.go`), no manual config needed.
 
-**Listing**: `crush plugin list` shows all installed plugins with metadata
-parsed from their `.claude-plugin/plugin.json` manifests.
+**Listing**: `crush plugin list` shows installed plugins with metadata from `.claude-plugin/plugin.json`.
 
-**Auto-discovery**: `plugins.SkillsDirs()` scans the plugins directory at
-startup and returns all `skills/` subdirectories that exist. These are
-merged into `config.Options.SkillsPaths` alongside the built-in skill
-directories (`GlobalSkillsDirs()` and `ProjectSkillsDir()`).
+**Auto-discovery**: `plugins.SkillsDirs()` scans plugins dir at startup, returns all existing `skills/` subdirectories. Merged into `config.Options.SkillsPaths` alongside builtin skill dirs (`GlobalSkillsDirs()` + `ProjectSkillsDir()`).
 
 ### Plugin Slash Commands
 
-Plugin skills automatically become slash commands. Each skill defined in a
-plugin's `skills/` directory gets a `/` command:
+Plugin skills auto-become slash commands. Each skill in plugin's `skills/` gets `/` command:
 
 - **Namespaced**: `/plugin-name:skill-name` — e.g. `/caveman:caveman-review`
-- **Bare shorthand**: `/skill-name` — e.g. `/caveman-review`
-  (shorthand when unambiguous)
+- **Bare shorthand**: `/skill-name` — e.g. `/caveman-review` (when unambiguous)
 
-Plugins are auto-namespaced by their installation directory name under
-`~/.config/crush/plugins/`. Skills from non-plugin sources (built-in,
-user, project) can opt into slash commands by setting
-`user-invocable: true` in their `SKILL.md` YAML frontmatter.
+Plugins auto-namespaced by installation dir name under `~/.config/crush/plugins/`. Non-plugin skills (built-in, user, project) opt into slash commands via `user-invocable: true` in `SKILL.md` YAML frontmatter.
 
-Slash command resolution uses a two-pronged approach:
+Slash command resolution uses two-pronged approach:
 1. Direct workspace skill catalog lookup (always available, primary path)
 2. Async-loaded custom commands cache (fallback)
 
-The commands dialog (`/` on empty input) shows plugin skills grouped
-under `── plugin-name ──` separator headers, sorted alphabetically within
-each group. Non-plugin skills appear without a group header.
+Commands dialog (`/` on empty input) shows plugin skills grouped under `── plugin-name ──` separator headers, sorted alphabetically within each group. Non-plugin skills appear without group header.
 
-The namespace detection is in `internal/skills/catalog.go:pluginNamespace()`
-(matches `.../crush/plugins/<name>/skills` structure), slash command
-matching in `internal/ui/model/ui.go:handleSkillSlashCommand()`, and
-command palette grouping in
-`internal/ui/dialog/commands.go:setCommandItems()` with
-`GroupHeaderItem` separators defined in
-`internal/ui/dialog/commands_item.go`.
+Namespace detection in `internal/skills/catalog.go:pluginNamespace()` (matches `.../crush/plugins/<name>/skills` structure), slash command matching in `internal/ui/model/ui.go:handleSkillSlashCommand()`, command palette grouping in `internal/ui/dialog/commands.go:setCommandItems()` with `GroupHeaderItem` separators in `internal/ui/dialog/commands_item.go`.
 
 ## Build/Test/Lint Commands
 
 - **Build**: `go build .` or `go run .`
-- **Test**: `task test` or `go test ./...` (run single test:
-  `go test ./internal/llm/prompt -run TestGetContextFromPaths`)
-- **Update Golden Files**: `go test ./... -update` (regenerates `.golden`
-  files when test output changes)
-  - Update specific package:
-    `go test ./internal/tui/components/core -update` (in this case,
-    we're updating "core")
+- **Test**: `task test` or `go test ./...` (run single test: `go test ./internal/llm/prompt -run TestGetContextFromPaths`)
+- **Update Golden Files**: `go test ./... -update` (regenerates `.golden` on output change)
+  - Update specific package: `go test ./internal/tui/components/core -update`
 - **Lint**: `task lint:fix`
 - **Format**: `task fmt` (`gofumpt -w .`)
-- **Modernize**: `task modernize` (runs `modernize` which makes code
-  simplifications)
-- **Dev**: `task dev` (runs with profiling enabled)
+- **Modernize**: `task modernize` (code simplifications)
+- **Dev**: `task dev` (runs with profiling)
 
 ## Code Style Guidelines
 
-- **Imports**: Use `goimports` formatting, group stdlib, external, internal
-  packages.
-- **Formatting**: Use gofumpt (stricter than gofmt), enabled in
-  golangci-lint.
-- **Naming**: Standard Go conventions — PascalCase for exported, camelCase
-  for unexported.
-- **Types**: Prefer explicit types, use type aliases for clarity (e.g.,
-  `type AgentName string`).
-- **Error handling**: Return errors explicitly, use `fmt.Errorf` for
-  wrapping.
-- **Context**: Always pass `context.Context` as first parameter for
-  operations.
-- **Interfaces**: Define interfaces in consuming packages, keep them small
-  and focused.
+- **Imports**: `goimports`, group stdlib, external, internal.
+- **Formatting**: gofumpt (stricter than gofmt), enabled in golangci-lint.
+- **Naming**: Standard Go — PascalCase exported, camelCase unexported.
+- **Types**: Prefer explicit types, use type aliases for clarity (e.g. `type AgentName string`).
+- **Error handling**: Return errors explicitly, use `fmt.Errorf` for wrapping.
+- **Context**: Always pass `context.Context` as first parameter.
+- **Interfaces**: Define in consuming packages, keep small + focused.
 - **Structs**: Use struct embedding for composition, group related fields.
-- **Constants**: Use typed constants with iota for enums, group in const
-  blocks.
-- **Testing**: Use testify's `require` package, parallel tests with
-  `t.Parallel()`, `t.SetEnv()` to set environment variables. Always use
-  `t.Tempdir()` when in need of a temporary directory. This directory does
-  not need to be removed.
-- **JSON tags**: Use snake_case for JSON field names.
-- **File permissions**: Use octal notation (0o755, 0o644) for file
-  permissions.
-- **Log messages**: Log messages must start with a capital letter (e.g.,
-  "Failed to save session" not "failed to save session").
-  - This is enforced by `task lint:log` which runs as part of `task lint`.
-- **Comments**: End comments in periods unless comments are at the end of the
-  line.
+- **Constants**: Typed constants with iota for enums, group in const blocks.
+- **Testing**: testify's `require` package, parallel tests with `t.Parallel()`, `t.SetEnv()`. Always use `t.Tempdir()` for temp dirs — no need to remove.
+- **JSON tags**: snake_case.
+- **File permissions**: Octal notation (`0o755`, `0o644`).
+- **Log messages**: Start with capital letter (e.g. "Failed to save session"). Enforced by `task lint:log`.
+- **Comments**: End in periods unless at end of line.
 
 ## Testing with Mock Providers
 
-When writing tests that involve provider configurations, use the mock
-providers to avoid API calls:
+When writing tests with provider configs, use mock providers to avoid API calls:
 
 ```go
 func TestYourFunction(t *testing.T) {
@@ -272,52 +180,34 @@ func TestYourFunction(t *testing.T) {
 
 ## Formatting
 
-- ALWAYS format any Go code you write.
+- ALWAYS format any Go code.
   - First, try `gofumpt -w .`.
-  - If `gofumpt` is not available, use `goimports`.
-  - If `goimports` is not available, use `gofmt`.
-  - You can also use `task fmt` to run `gofumpt -w .` on the entire project,
-    as long as `gofumpt` is on the `PATH`.
+  - If `gofumpt` not available, use `goimports`.
+  - If `goimports` not available, use `gofmt`.
+  - Or use `task fmt` to run `gofumpt -w .` on entire project, if `gofumpt` on `PATH`.
 
 ## Comments
 
-- Comments that live on their own lines should start with capital letters and
-  end with periods. Wrap comments at 78 columns.
+- Comments on own lines: start with capital letters, end with periods. Wrap at 78 columns.
 
 ## Committing
 
-- ALWAYS use semantic commits (`fix:`, `feat:`, `chore:`, `refactor:`,
-  `docs:`, `sec:`, etc).
-- Try to keep commits to one line, not including your attribution. Only use
-  multi-line commits when additional context is truly necessary.
+- ALWAYS use semantic commits (`fix:`, `feat:`, `chore:`, `refactor:`, `docs:`, `sec:`, etc).
+- Keep commits to one line (excluding attribution). Multi-line only when truly needed.
 
 ## Working on the TUI (UI)
 
-Anytime you need to work on the TUI, read `internal/ui/AGENTS.md` before
-starting work.
+Before working on TUI, read `internal/ui/AGENTS.md`.
 
 ## Styling System
 
-The styling system lives in `internal/ui/styles/` and is organized into
-three layers:
+Styling system in `internal/ui/styles/`, three layers:
 
-- **`quickstyle.go`**: The stable base theme builder. `quickStyle(opts)`
-  constructs a `Styles` struct from `quickStyleOpts` — a palette of
-  design tokens (primary, secondary, fgBase, bgBase, success, error, etc.).
-  `quickStyle` must be fully token-driven: never hardcode specific
-  `charmtone.*` colors here (except Chroma syntax highlighting, which is
-  pending tokenization). This lets any theme reuse the base without
-  inheriting Charmtone-specific colors.
-- **`themes.go`**: Defines concrete themes. Each theme function (e.g.
-  `CharmtonePantera`) calls `quickStyle` with its palette, then applies
-  theme-specific overrides as needed.
-- **`styles.go`**: Defines the `Styles` struct and its documentation —
-  the shape of what `quickStyle` produces.
+- **`quickstyle.go`**: Stable base theme builder. `quickStyle(opts)` constructs `Styles` struct from `quickStyleOpts` — palette of design tokens (primary, secondary, fgBase, bgBase, success, error, etc.). Must be fully token-driven: never hardcode specific `charmtone.*` colors (except Chroma syntax highlighting, pending tokenization). Lets any theme reuse base without inheriting Charmtone-specific colors.
+- **`themes.go`**: Concrete themes. Each theme (e.g. `CharmtonePantera`) calls `quickStyle` with its palette, then applies theme-specific overrides.
+- **`styles.go`**: `Styles` struct + documentation — shape of what `quickStyle` produces.
 
-**Adding theme-specific overrides**: When a style genuinely needs a
-color that doesn't fit the token model (e.g. the bang prompt uses
-Salt/Hazy/Larple), keep `quickStyle` on the closest semantic token and
-override only the differing colors in the theme function:
+**Adding theme-specific overrides**: When style needs color not fitting token model (e.g. bang prompt uses Salt/Hazy/Larple), keep `quickStyle` on closest semantic token, override only differing colors in theme function:
 
 ```go
 func CharmtonePantera() Styles {
@@ -332,6 +222,4 @@ func CharmtonePantera() Styles {
 }
 ```
 
-**Adding a new theme**: Add a function in `themes.go` that returns the
-result of `quickStyle` with a `quickStyleOpts` palette (plus any needed
-overrides), then wire it into `ThemeForProvider`.
+**Adding new theme**: Add function in `themes.go` returning `quickStyle` result with `quickStyleOpts` palette (plus needed overrides), wire into `ThemeForProvider`.

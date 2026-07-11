@@ -2192,8 +2192,13 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 
 				if strings.HasPrefix(value, "/") {
-					token := strings.SplitN(value[1:], " ", 2)[0]
-					if cmd := m.handleSkillSlashCommand(token); cmd != nil {
+					parts := strings.SplitN(value[1:], " ", 2)
+					token := parts[0]
+					var args string
+					if len(parts) > 1 {
+						args = parts[1]
+					}
+					if cmd := m.handleSkillSlashCommand(token, args); cmd != nil {
 						return cmd
 					}
 				}
@@ -3564,7 +3569,9 @@ func (m *UI) attachSkill(skillID, name string) tea.Cmd {
 // custom commands cache.
 // When a match is found, the skill content is injected as a user
 // message (matching Claude Code's behavior), not as a file attachment.
-func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
+// args contains the text after the skill name (e.g. "file.md" from
+// "/caveman-compress file.md").
+func (m *UI) handleSkillSlashCommand(token, args string) tea.Cmd {
 	var namespace, skillName string
 	if idx := strings.Index(token, ":"); idx >= 0 {
 		namespace = token[:idx]
@@ -3583,11 +3590,11 @@ func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
 				}
 				if namespace != "" {
 					if entry.Namespace == namespace && entry.Name == skillName {
-						return m.invokeSkillAsMessage(entry.ID, entry.Name)
+						return m.invokeSkillAsMessage(entry.ID, entry.Name, args)
 					}
 				} else {
 					if entry.Name == skillName {
-						return m.invokeSkillAsMessage(entry.ID, entry.Name)
+						return m.invokeSkillAsMessage(entry.ID, entry.Name, args)
 					}
 				}
 			}
@@ -3601,11 +3608,11 @@ func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
 		}
 		if namespace != "" {
 			if cmd.Namespace == namespace && cmd.Skill.Name == skillName {
-				return m.invokeSkillAsMessage(cmd.Skill.SkillFilePath, cmd.Skill.Name)
+				return m.invokeSkillAsMessage(cmd.Skill.SkillFilePath, cmd.Skill.Name, args)
 			}
 		} else {
 			if cmd.Skill.Name == skillName {
-				return m.invokeSkillAsMessage(cmd.Skill.SkillFilePath, cmd.Skill.Name)
+				return m.invokeSkillAsMessage(cmd.Skill.SkillFilePath, cmd.Skill.Name, args)
 			}
 		}
 	}
@@ -3614,8 +3621,9 @@ func (m *UI) handleSkillSlashCommand(token string) tea.Cmd {
 
 // invokeSkillAsMessage reads a skill file, formats it as a loaded-skill
 // XML user message (matching Claude Code's skill injection behavior),
-// and sends it into the conversation.
-func (m *UI) invokeSkillAsMessage(skillID, name string) tea.Cmd {
+// and sends it into the conversation. If args is non-empty, it is
+// appended after the skill invocation as the user's intent.
+func (m *UI) invokeSkillAsMessage(skillID, name, args string) tea.Cmd {
 	return func() tea.Msg {
 		content, result, err := m.com.Workspace.ReadSkill(context.Background(), skillID)
 		if err != nil {
@@ -3628,7 +3636,11 @@ func (m *UI) invokeSkillAsMessage(skillID, name string) tea.Cmd {
 		skill.Name = result.Name
 		skill.Description = result.Description
 		skill.SkillFilePath = skillID
-		return sendMessageMsg{Content: skill.FormatInvocation()}
+		msg := skill.FormatInvocation()
+		if args != "" {
+			msg += "\n\n" + args
+		}
+		return sendMessageMsg{Content: msg}
 	}
 }
 

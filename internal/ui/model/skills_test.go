@@ -116,27 +116,32 @@ func TestHandleSkillSlashCommand(t *testing.T) {
 	}
 
 	t.Run("namespace:skill match", func(t *testing.T) {
-		cmd := ui.handleSkillSlashCommand("caveman:caveman-review")
+		cmd := ui.handleSkillSlashCommand("caveman:caveman-review", "")
 		require.NotNil(t, cmd)
 	})
 
 	t.Run("bare skill name match", func(t *testing.T) {
-		cmd := ui.handleSkillSlashCommand("caveman")
+		cmd := ui.handleSkillSlashCommand("caveman", "")
+		require.NotNil(t, cmd)
+	})
+
+	t.Run("bare skill with args", func(t *testing.T) {
+		cmd := ui.handleSkillSlashCommand("caveman", "lite")
 		require.NotNil(t, cmd)
 	})
 
 	t.Run("wrong namespace no match", func(t *testing.T) {
-		cmd := ui.handleSkillSlashCommand("wrong:caveman")
+		cmd := ui.handleSkillSlashCommand("wrong:caveman", "")
 		require.Nil(t, cmd)
 	})
 
 	t.Run("non-existent skill no match", func(t *testing.T) {
-		cmd := ui.handleSkillSlashCommand("nonexistent")
+		cmd := ui.handleSkillSlashCommand("nonexistent", "")
 		require.Nil(t, cmd)
 	})
 
 	t.Run("non-skill command no match", func(t *testing.T) {
-		cmd := ui.handleSkillSlashCommand("custom-cmd")
+		cmd := ui.handleSkillSlashCommand("custom-cmd", "")
 		require.Nil(t, cmd)
 	})
 }
