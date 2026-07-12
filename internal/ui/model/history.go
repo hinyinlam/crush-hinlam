@@ -90,6 +90,8 @@ func (m *UI) handleHistoryDown(msg tea.Msg) tea.Cmd {
 }
 
 // handleHistoryEscape handles escape for exiting history navigation.
+// When not in history mode and the textarea is empty, escape also
+// removes the most recently attached file.
 func (m *UI) handleHistoryEscape(msg tea.Msg) tea.Cmd {
 	prevHeight := m.textarea.Height()
 	// Return to current draft when browsing history.
@@ -99,6 +101,12 @@ func (m *UI) handleHistoryEscape(msg tea.Msg) tea.Cmd {
 		m.textarea.InsertString(m.promptHistory.draft)
 		m.syncBangModeFromTextarea()
 		return m.updateTextareaWithPrevHeight(nil, prevHeight)
+	}
+
+	// If textarea is empty and there are attachments, remove the last one.
+	if m.textarea.Value() == "" && m.attachments.Count() > 0 {
+		m.attachments.RemoveLast()
+		return nil
 	}
 
 	// Let textarea handle escape normally.

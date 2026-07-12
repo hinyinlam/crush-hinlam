@@ -38,6 +38,14 @@ type Attachments struct {
 
 func (m *Attachments) List() []message.Attachment { return m.list }
 func (m *Attachments) Reset()                     { m.list = nil }
+func (m *Attachments) Count() int                 { return len(m.list) }
+
+// RemoveLast removes the most recently added attachment.
+func (m *Attachments) RemoveLast() {
+	if len(m.list) > 0 {
+		m.list = m.list[:len(m.list)-1]
+	}
+}
 
 func (m *Attachments) Update(msg tea.Msg) bool {
 	switch msg := msg.(type) {
